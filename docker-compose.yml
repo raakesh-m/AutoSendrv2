@@ -33,8 +33,25 @@ services:
     networks:
       - autosendr_network
     volumes:
-      - .:/app
+      # Mount source code but exclude build artifacts
+      - ./app:/app/app
+      - ./components:/app/components
+      - ./lib:/app/lib
+      - ./hooks:/app/hooks
+      - ./styles:/app/styles
+      - ./public:/app/public
+      - ./package.json:/app/package.json
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      - ./next.config.mjs:/app/next.config.mjs
+      - ./tailwind.config.ts:/app/tailwind.config.ts
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./postcss.config.mjs:/app/postcss.config.mjs
+      - ./components.json:/app/components.json
+      - ./next-env.d.ts:/app/next-env.d.ts
+      - ./.env:/app/.env
+      # Keep node_modules and .next in container
       - /app/node_modules
+      - /app/.next
       - uploads_data:/app/uploads
 
 volumes:
