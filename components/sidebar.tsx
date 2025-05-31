@@ -4,20 +4,14 @@ import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Dialog, Transition } from "@headlessui/react";
-import {
-  X,
-  Database,
-  TestTube,
-  LayoutDashboard,
-  Paperclip,
-} from "lucide-react";
+import { X, Database, TestTube, LayoutDashboard, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AutoSendrLogo } from "@/components/autosendr-logo";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Single Email Sender", href: "/single-email-sender", icon: TestTube },
-  { name: "Attachments & Templates", href: "/attachments", icon: Paperclip },
+  { name: "Controls", href: "/controls", icon: Settings },
   { name: "Database", href: "/database", icon: Database },
 ];
 

@@ -451,16 +451,10 @@ export function ContactsTable() {
                   ) : (
                     <>
                       <Mail className="h-4 w-4" />
-                      Send to {selectedContacts.length} contacts
+                      Send {selectedContacts.length} AI-Personalized emails
                     </>
                   )}
                 </Button>
-
-                {selectedContacts.length > 0 && !bulkSendingState.isActive && (
-                  <Badge variant="outline">
-                    {selectedContacts.length} selected
-                  </Badge>
-                )}
               </div>
 
               {selectedContacts.length > 5 && !bulkSendingState.isActive && (

@@ -15,7 +15,7 @@ export default function SingleEmailSenderPage() {
           </p>
         </div>
 
-        <div className="max-w-2xl">
+        <div className="w-full">
           <EmailTesterForm />
         </div>
       </div>

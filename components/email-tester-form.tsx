@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -21,6 +22,8 @@ import {
   Mail,
   User,
   Building2,
+  Settings,
+  Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -237,6 +240,16 @@ Raakesh`;
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Template & Rules Link */}
+        <div className="flex justify-end">
+          <Link href="/controls">
+            <Button variant="outline" size="sm" className="text-xs">
+              <Settings className="h-3 w-3 mr-2" />
+              View Controls
+            </Button>
+          </Link>
+        </div>
+
         {/* Required Fields Notice */}
         {!emailSent && (
           <Alert>
@@ -394,8 +407,8 @@ Raakesh`;
               </>
             ) : (
               <>
-                <Send className="h-5 w-5 mr-3" />
-                Send Email
+                <Sparkles className="h-5 w-5 mr-3" />
+                Enhance with AI and Send
               </>
             )}
           </Button>
