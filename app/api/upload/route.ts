@@ -6,139 +6,220 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// Function to intelligently map and enrich contact data using AI
-async function enrichContactData(rawContact: any): Promise<any> {
-  try {
-    // Basic field mapping first
-    const mappedContact: any = {
-      email: rawContact.email,
-      name: rawContact.name || null,
-      company_name:
-        rawContact.company_name ||
-        rawContact.company ||
-        rawContact.companyName ||
-        null,
-      role: rawContact.role || rawContact.position || rawContact.title || null,
-      recruiter_name:
-        rawContact.recruiter_name ||
-        rawContact.recruiter ||
-        rawContact.recruiterName ||
-        null,
-      additional_info: {},
-    };
+// Global session store (in production, use Redis or database)
+declare global {
+  var uploadSessions:
+    | Map<
+        string,
+        {
+          status: "processing" | "completed" | "failed";
+          progress: number;
+          message: string;
+          totalContacts: number;
+          processedContacts: number;
+          startTime: number;
+          result?: any;
+          error?: string;
+        }
+      >
+    | undefined;
+}
 
-    // Store original fields in additional_info
-    Object.keys(rawContact).forEach((key) => {
-      if (
-        ![
-          "email",
-          "name",
-          "company_name",
-          "company",
-          "companyName",
-          "role",
-          "position",
-          "title",
-          "recruiter_name",
-          "recruiter",
-          "recruiterName",
-        ].includes(key)
-      ) {
-        mappedContact.additional_info[key] = rawContact[key];
-      }
+// Initialize global session store
+if (!global.uploadSessions) {
+  global.uploadSessions = new Map();
+}
+
+// Function to update session progress
+function updateSessionProgress(
+  sessionId: string,
+  update: Partial<{
+    status: "processing" | "completed" | "failed";
+    progress: number;
+    message: string;
+    totalContacts: number;
+    processedContacts: number;
+    startTime: number;
+    result?: any;
+    error?: string;
+  }>
+) {
+  const session = global.uploadSessions!.get(sessionId);
+  if (session) {
+    global.uploadSessions!.set(sessionId, { ...session, ...update });
+  }
+}
+
+// Function to batch process contacts with AI (much faster than individual calls)
+async function batchEnrichContacts(
+  contacts: any[],
+  sessionId: string
+): Promise<any[]> {
+  try {
+    if (!process.env.GROQ_API_KEY || contacts.length === 0) {
+      return contacts.map((contact) => basicMapping(contact));
+    }
+
+    // Process in batches of 10 for optimal performance
+    const batchSize = 10;
+    const enrichedContacts = [];
+    const totalBatches = Math.ceil(contacts.length / batchSize);
+
+    updateSessionProgress(sessionId, {
+      message: `Processing ${contacts.length} contacts with AI...`,
+      progress: 20,
     });
 
-    // If we have Groq API key and missing key fields, use AI to enrich
-    if (
-      process.env.GROQ_API_KEY &&
-      (!mappedContact.name ||
-        !mappedContact.role ||
-        !mappedContact.recruiter_name)
-    ) {
+    for (let i = 0; i < contacts.length; i += batchSize) {
+      const batch = contacts.slice(i, i + batchSize);
+      const currentBatch = Math.floor(i / batchSize) + 1;
+
+      updateSessionProgress(sessionId, {
+        message: `AI processing batch ${currentBatch}/${totalBatches}...`,
+        progress: 20 + (currentBatch / totalBatches) * 60, // 20% to 80%
+      });
+
       try {
-        const enrichmentPrompt = `
-Analyze this contact data and intelligently fill in missing information:
+        const batchPrompt = `
+Analyze and enrich this batch of ${
+          batch.length
+        } contacts. For each contact, intelligently fill in missing information based on the email and company patterns.
 
-Email: ${mappedContact.email}
-Company: ${mappedContact.company_name || "Unknown"}
-Current Name: ${mappedContact.name || "Not provided"}
-Current Role: ${mappedContact.role || "Not provided"}
-Current Recruiter Name: ${mappedContact.recruiter_name || "Not provided"}
-Additional Info: ${JSON.stringify(mappedContact.additional_info)}
+Contacts to process:
+${batch
+  .map(
+    (contact, index) => `
+Contact ${index + 1}:
+- Email: ${contact.email}
+- Company: ${contact.company || contact.company_name || "Unknown"}
+- Current Name: ${contact.name || "Not provided"}
+- Current Role: ${
+      contact.role || contact.position || contact.title || "Not provided"
+    }
+- Additional Info: ${JSON.stringify(contact)}
+`
+  )
+  .join("\n")}
 
-Please provide a JSON response with intelligent guesses for missing fields. Rules:
+Rules for enrichment:
 1. If email is like "careers@", "jobs@", "hr@", "recruiting@" - suggest role as "Recruiter" or "HR"
-2. If email has specific name patterns, extract likely recruiter name
+2. Extract likely names from email patterns when possible
 3. For company emails, suggest appropriate roles based on company type
 4. Keep existing non-null values unchanged
-5. Only return the enhanced contact object
+5. Make intelligent guesses based on email domains and patterns
 
-Example response:
+Respond with a JSON array of ${
+          batch.length
+        } objects in the exact same order, each containing:
 {
-  "name": "John Smith",
-  "role": "Senior Frontend Developer", 
-  "recruiter_name": "HR Team"
+  "email": "original_email",
+  "name": "enhanced_or_original_name",
+  "company_name": "enhanced_or_original_company",
+  "role": "enhanced_or_original_role",
+  "recruiter_name": "enhanced_or_original_recruiter"
 }`;
 
         const completion = await groq.chat.completions.create({
-          messages: [
-            {
-              role: "user",
-              content: enrichmentPrompt,
-            },
-          ],
+          messages: [{ role: "user", content: batchPrompt }],
           model: "llama3-8b-8192",
           temperature: 0.3,
+          max_tokens: 2000,
         });
 
         const aiResponse = completion.choices[0]?.message?.content;
         if (aiResponse) {
-          const aiEnrichment = JSON.parse(aiResponse);
+          const aiEnrichments = JSON.parse(aiResponse);
 
-          // Apply AI suggestions only for missing fields
-          if (!mappedContact.name && aiEnrichment.name) {
-            mappedContact.name = aiEnrichment.name;
+          if (
+            Array.isArray(aiEnrichments) &&
+            aiEnrichments.length === batch.length
+          ) {
+            // Merge AI suggestions with original data
+            batch.forEach((originalContact, index) => {
+              const aiSuggestion = aiEnrichments[index];
+              const enriched = {
+                email: originalContact.email,
+                name: aiSuggestion.name || originalContact.name || null,
+                company_name:
+                  aiSuggestion.company_name ||
+                  originalContact.company ||
+                  originalContact.company_name ||
+                  null,
+                role:
+                  aiSuggestion.role ||
+                  originalContact.role ||
+                  originalContact.position ||
+                  originalContact.title ||
+                  null,
+                recruiter_name:
+                  aiSuggestion.recruiter_name ||
+                  originalContact.recruiter_name ||
+                  originalContact.recruiter ||
+                  null,
+                additional_info: originalContact,
+              };
+              enrichedContacts.push(enriched);
+            });
+          } else {
+            // Fallback to basic mapping if AI response is malformed
+            enrichedContacts.push(
+              ...batch.map((contact) => basicMapping(contact))
+            );
           }
-          if (!mappedContact.role && aiEnrichment.role) {
-            mappedContact.role = aiEnrichment.role;
-          }
-          if (!mappedContact.recruiter_name && aiEnrichment.recruiter_name) {
-            mappedContact.recruiter_name = aiEnrichment.recruiter_name;
-          }
+        } else {
+          // Fallback to basic mapping if no AI response
+          enrichedContacts.push(
+            ...batch.map((contact) => basicMapping(contact))
+          );
         }
       } catch (aiError) {
         console.log(
-          "AI enrichment failed, continuing with basic mapping:",
+          `AI enrichment failed for batch ${currentBatch}, using basic mapping:`,
           aiError
         );
+        enrichedContacts.push(...batch.map((contact) => basicMapping(contact)));
+      }
+
+      // Small delay between batches to respect rate limits
+      if (i + batchSize < contacts.length) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
 
-    return mappedContact;
+    return enrichedContacts;
   } catch (error) {
-    console.error("Error enriching contact data:", error);
-    // Return basic mapping if enrichment fails
-    return {
-      email: rawContact.email,
-      name: rawContact.name || null,
-      company_name:
-        rawContact.company_name ||
-        rawContact.company ||
-        rawContact.companyName ||
-        null,
-      role: rawContact.role || rawContact.position || rawContact.title || null,
-      recruiter_name:
-        rawContact.recruiter_name ||
-        rawContact.recruiter ||
-        rawContact.recruiterName ||
-        null,
-      additional_info: rawContact,
-    };
+    console.error("Error in batch enrichment:", error);
+    return contacts.map((contact) => basicMapping(contact));
   }
+}
+
+// Basic mapping function without AI
+function basicMapping(rawContact: any): any {
+  return {
+    email: rawContact.email,
+    name: rawContact.name || null,
+    company_name:
+      rawContact.company_name ||
+      rawContact.company ||
+      rawContact.companyName ||
+      null,
+    role: rawContact.role || rawContact.position || rawContact.title || null,
+    recruiter_name:
+      rawContact.recruiter_name ||
+      rawContact.recruiter ||
+      rawContact.recruiterName ||
+      null,
+    additional_info: rawContact,
+  };
 }
 
 // POST - Process uploaded files and extract contact data
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  const sessionId = `upload_${Date.now()}_${Math.random()
+    .toString(36)
+    .substr(2, 9)}`;
+
   try {
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
@@ -147,7 +228,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No files provided" }, { status: 400 });
     }
 
-    const processedContacts = [];
+    console.log(
+      `🚀 Starting upload processing for ${files.length} file(s) with session ${sessionId}`
+    );
+
+    // Initialize session
+    global.uploadSessions!.set(sessionId, {
+      status: "processing",
+      progress: 0,
+      message: "Starting upload...",
+      totalContacts: 0,
+      processedContacts: 0,
+      startTime: Date.now(),
+    });
+
+    const allContacts = [];
+
+    // Step 1: Parse files (fast)
+    updateSessionProgress(sessionId, {
+      message: "Parsing uploaded files...",
+      progress: 10,
+    });
 
     for (const file of files) {
       const fileContent = await file.text();
@@ -155,9 +256,7 @@ export async function POST(request: NextRequest) {
 
       try {
         if (file.name.endsWith(".json")) {
-          // Process JSON file
           const jsonData = JSON.parse(fileContent);
-
           if (Array.isArray(jsonData)) {
             contacts = jsonData;
           } else if (jsonData.contacts && Array.isArray(jsonData.contacts)) {
@@ -165,18 +264,7 @@ export async function POST(request: NextRequest) {
           } else {
             contacts = [jsonData];
           }
-
-          // Enrich each contact with AI
-          const enrichedContacts = [];
-          for (const contact of contacts) {
-            if (contact.email) {
-              const enriched = await enrichContactData(contact);
-              enrichedContacts.push(enriched);
-            }
-          }
-          contacts = enrichedContacts;
         } else if (file.name.endsWith(".csv")) {
-          // Process CSV file
           const lines = fileContent.split("\n");
           const headers = lines[0]
             .split(",")
@@ -189,7 +277,6 @@ export async function POST(request: NextRequest) {
 
               headers.forEach((header, index) => {
                 if (values[index]) {
-                  // Map common header variations to standard fields
                   if (header.includes("email")) {
                     contact.email = values[index];
                   } else if (
@@ -220,43 +307,40 @@ export async function POST(request: NextRequest) {
             }
           }
         } else if (file.name.endsWith(".txt")) {
-          // Process TXT file - assume one email per line or JSON-like format
           const lines = fileContent.split("\n");
-
           for (const line of lines) {
             const trimmedLine = line.trim();
             if (trimmedLine) {
-              // Try to parse as JSON first
               try {
                 const contact = JSON.parse(trimmedLine);
                 if (contact.email) {
-                  const enriched = await enrichContactData(contact);
-                  contacts.push(enriched);
+                  contacts.push(contact);
                 }
               } catch {
-                // If not JSON, check if it's an email
                 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                 if (emailRegex.test(trimmedLine)) {
-                  const enriched = await enrichContactData({
-                    email: trimmedLine,
-                  });
-                  contacts.push(enriched);
+                  contacts.push({ email: trimmedLine });
                 }
               }
             }
           }
         }
 
-        processedContacts.push(...contacts);
+        allContacts.push(...contacts);
       } catch (error) {
         console.error(`Error processing file ${file.name}:`, error);
       }
     }
 
-    // Validate that we have at least some contacts with emails
-    const validContacts = processedContacts.filter((contact) => contact.email);
+    const validContacts = allContacts.filter((contact) => contact.email);
 
     if (validContacts.length === 0) {
+      updateSessionProgress(sessionId, {
+        status: "failed",
+        message: "No valid contacts found",
+        error:
+          "No valid contacts found in uploaded files. Make sure files contain email addresses.",
+      });
       return NextResponse.json(
         {
           error:
@@ -266,30 +350,103 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Save to database
+    updateSessionProgress(sessionId, {
+      totalContacts: validContacts.length,
+      message: `Found ${validContacts.length} valid contacts. Starting AI enrichment...`,
+      progress: 15,
+    });
+
+    console.log(`📁 Parsed ${validContacts.length} valid contacts from files`);
+
+    // Step 2: Batch AI enrichment (much faster than individual calls)
+    console.log(`🤖 Starting batch AI enrichment...`);
+    const enrichedContacts = await batchEnrichContacts(
+      validContacts,
+      sessionId
+    );
+
+    updateSessionProgress(sessionId, {
+      message: "Saving to database...",
+      progress: 85,
+    });
+
+    console.log(
+      `✨ AI enrichment completed in ${(
+        (Date.now() - startTime) /
+        1000
+      ).toFixed(1)}s`
+    );
+
+    // Step 3: Save to database
+    console.log(`💾 Saving to database...`);
     const saveResponse = await fetch(`${request.nextUrl.origin}/api/contacts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts: validContacts }),
+      body: JSON.stringify({ contacts: enrichedContacts }),
     });
 
     if (!saveResponse.ok) {
+      updateSessionProgress(sessionId, {
+        status: "failed",
+        message: "Database save failed",
+        error: "Failed to save contacts to database",
+      });
       throw new Error("Failed to save contacts to database");
     }
 
     const saveResult = await saveResponse.json();
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    console.log(`🎉 Upload completed successfully in ${totalTime}s`);
+
+    // Mark session as completed
+    updateSessionProgress(sessionId, {
+      status: "completed",
+      progress: 100,
+      message: `Successfully processed ${enrichedContacts.length} contacts in ${totalTime}s`,
+      processedContacts: enrichedContacts.length,
+      result: {
+        message: `Successfully processed ${enrichedContacts.length} contacts from ${files.length} file(s) with AI enrichment in ${totalTime}s`,
+        contacts: saveResult.contacts,
+        totalProcessed: enrichedContacts.length,
+        aiEnriched: process.env.GROQ_API_KEY ? enrichedContacts.length : 0,
+        processingTime: `${totalTime}s`,
+      },
+    });
 
     return NextResponse.json({
-      message: `Successfully processed ${validContacts.length} contacts from ${files.length} file(s) with AI enrichment`,
-      contacts: saveResult.contacts,
-      totalProcessed: validContacts.length,
-      aiEnriched: process.env.GROQ_API_KEY ? validContacts.length : 0,
+      sessionId,
+      message: `Upload started! Processing ${enrichedContacts.length} contacts in background.`,
+      totalContacts: enrichedContacts.length,
+      backgroundProcessing: true,
     });
   } catch (error) {
     console.error("Error processing upload:", error);
+    updateSessionProgress(sessionId, {
+      status: "failed",
+      message: "Upload failed",
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    });
     return NextResponse.json(
       { error: "Failed to process uploaded files" },
       { status: 500 }
     );
   }
+}
+
+// GET - Check upload progress
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const sessionId = searchParams.get("sessionId");
+
+  if (!sessionId) {
+    return NextResponse.json({ error: "Session ID required" }, { status: 400 });
+  }
+
+  const session = global.uploadSessions!.get(sessionId);
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(session);
 }

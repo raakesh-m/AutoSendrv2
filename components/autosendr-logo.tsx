@@ -1,19 +1,23 @@
-"use client"
+"use client";
 
 interface AutoSendrLogoProps {
-  size?: "sm" | "md" | "lg"
-  variant?: "default" | "icon-only" | "text-only"
-  className?: string
+  size?: "sm" | "md" | "lg";
+  variant?: "default" | "icon-only" | "text-only";
+  className?: string;
 }
 
-export function AutoSendrLogo({ size = "md", variant = "default", className = "" }: AutoSendrLogoProps) {
+export function AutoSendrLogo({
+  size = "md",
+  variant = "default",
+  className = "",
+}: AutoSendrLogoProps) {
   const sizes = {
     sm: { width: 120, height: 36, iconSize: 20, fontSize: 16 },
     md: { width: 160, height: 48, iconSize: 24, fontSize: 20 },
     lg: { width: 200, height: 60, iconSize: 32, fontSize: 24 },
-  }
+  };
 
-  const currentSize = sizes[size]
+  const currentSize = sizes[size];
 
   if (variant === "icon-only") {
     return (
@@ -33,15 +37,18 @@ export function AutoSendrLogo({ size = "md", variant = "default", className = ""
           fill="currentColor"
         />
       </svg>
-    )
+    );
   }
 
   if (variant === "text-only") {
     return (
-      <span className={`font-bold text-primary ${className}`} style={{ fontSize: currentSize.fontSize }}>
+      <span
+        className={`font-bold text-primary ${className}`}
+        style={{ fontSize: currentSize.fontSize }}
+      >
         AutoSendr
       </span>
-    )
+    );
   }
 
   return (
@@ -62,9 +69,12 @@ export function AutoSendrLogo({ size = "md", variant = "default", className = ""
           fill="currentColor"
         />
       </svg>
-      <span className="font-bold text-primary" style={{ fontSize: currentSize.fontSize }}>
+      <span
+        className="font-bold text-primary"
+        style={{ fontSize: currentSize.fontSize }}
+      >
         AutoSendr
       </span>
     </div>
-  )
+  );
 }

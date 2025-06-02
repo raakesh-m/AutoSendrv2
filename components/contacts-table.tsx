@@ -36,6 +36,7 @@ import {
   CheckCircle,
   AlertCircle,
   Users,
+  Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -310,14 +311,28 @@ export function ContactsTable() {
 
   if (loading) {
     return (
-      <Card>
+      <Card className="border-0 shadow-lg ring-1 ring-border/50">
         <CardHeader>
-          <CardTitle>Contacts</CardTitle>
-          <CardDescription>Loading contacts...</CardDescription>
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-xl">Contacts</CardTitle>
+              <CardDescription className="text-base">
+                Loading contacts...
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-center p-8">
-            <RefreshCw className="h-6 w-6 animate-spin" />
+          <div className="flex items-center justify-center p-12">
+            <div className="text-center space-y-3">
+              <div className="h-8 w-8 mx-auto border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+              <p className="text-sm text-muted-foreground">
+                Loading your contacts...
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -325,25 +340,35 @@ export function ContactsTable() {
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-0 shadow-lg ring-1 ring-border/50 transition-all duration-200 hover:shadow-xl hover:ring-border">
+      <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Contacts ({contacts.length})
-            </CardTitle>
-            <CardDescription>
-              Manage your contact database and send bulk email campaigns
-            </CardDescription>
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-xl flex items-center gap-3">
+                Contacts
+                <Badge variant="secondary" className="text-xs">
+                  {contacts.length.toLocaleString()}
+                </Badge>
+              </CardTitle>
+              <CardDescription className="text-base">
+                Manage your contact database and send bulk email campaigns
+              </CardDescription>
+            </div>
           </div>
           <div className="flex items-center space-x-2">
             <Button
               variant="outline"
               onClick={fetchContacts}
               disabled={loading || bulkSendingState.isActive}
+              className="h-9 transition-all duration-200 hover:bg-muted"
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
+              />
               Refresh
             </Button>
           </div>
@@ -351,20 +376,31 @@ export function ContactsTable() {
       </CardHeader>
       <CardContent>
         {contacts.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground">
-              No contacts found. Upload some contact data to get started.
+          <div className="text-center py-12">
+            <div className="mx-auto w-24 h-24 bg-muted/30 rounded-full flex items-center justify-center mb-4">
+              <Users className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <p className="text-lg font-medium text-muted-foreground mb-2">
+              No contacts found
+            </p>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              Upload some contact data to get started with your email campaigns.
             </p>
           </div>
         ) : (
           <>
-            {/* Campaign Status */}
+            {/* Enhanced Campaign Status */}
             {campaignCompleted && (
-              <Alert className="mb-6 border-green-200 bg-green-50">
+              <Alert className="mb-6 border-green-500/20 bg-green-500/5 ring-1 ring-green-500/20">
                 <CheckCircle className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-800">
-                  Bulk email campaign completed successfully!{" "}
-                  {bulkSendingState.sent} emails sent, {bulkSendingState.failed}{" "}
+                <AlertDescription className="text-green-800 font-medium">
+                  🎉 Bulk email campaign completed successfully!{" "}
+                  <span className="font-semibold">{bulkSendingState.sent}</span>{" "}
+                  emails sent,
+                  <span className="font-semibold">
+                    {" "}
+                    {bulkSendingState.failed}
+                  </span>{" "}
                   failed.
                   {bulkSendingState.aiEnhanced > 0 &&
                     ` ${bulkSendingState.aiEnhanced} emails were AI-enhanced.`}
@@ -372,60 +408,123 @@ export function ContactsTable() {
               </Alert>
             )}
 
-            {/* Real-time Bulk Send Progress */}
+            {/* Enhanced Real-time Bulk Send Progress */}
             {bulkSendingState.isActive && (
-              <div className="mb-6 p-6 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="space-y-4">
+              <div className="mb-6 p-6 bg-gradient-to-br from-blue-50/80 to-indigo-50/80 rounded-xl border border-blue-200/50 shadow-sm">
+                <div className="space-y-6">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-blue-900">
-                      📧 Bulk Email Campaign in Progress
-                    </h3>
-                    <Badge variant="secondary">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-500/10 rounded-lg">
+                        <Mail className="h-5 w-5 text-blue-600 animate-pulse" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-blue-900 text-lg">
+                          Bulk Email Campaign in Progress
+                        </h3>
+                        <p className="text-sm text-blue-700">
+                          Sending personalized emails to your contacts
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="secondary"
+                      className="bg-blue-100 text-blue-800 font-mono"
+                    >
                       {bulkSendingState.sent + bulkSendingState.failed}/
                       {bulkSendingState.total}
                     </Badge>
                   </div>
 
-                  <Progress value={bulkSendingState.progress} className="h-3" />
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium text-blue-800">
+                        Progress
+                      </span>
+                      <span className="font-mono text-blue-700">
+                        {Math.round(bulkSendingState.progress)}%
+                      </span>
+                    </div>
+                    <Progress
+                      value={bulkSendingState.progress}
+                      className="h-3 bg-blue-100"
+                    />
+                  </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <span>Sent: {bulkSendingState.sent}</span>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="flex items-center space-x-2 p-3 bg-white/50 rounded-lg border border-white/80">
+                      <div className="p-1.5 bg-green-500/10 rounded-md">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Sent</p>
+                        <p className="font-semibold text-green-700">
+                          {bulkSendingState.sent}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-red-600" />
-                      <span>Failed: {bulkSendingState.failed}</span>
+                    <div className="flex items-center space-x-2 p-3 bg-white/50 rounded-lg border border-white/80">
+                      <div className="p-1.5 bg-red-500/10 rounded-md">
+                        <AlertCircle className="h-4 w-4 text-red-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Failed</p>
+                        <p className="font-semibold text-red-700">
+                          {bulkSendingState.failed}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-blue-600" />
-                      <span>{bulkSendingState.estimatedTimeRemaining}</span>
+                    <div className="flex items-center space-x-2 p-3 bg-white/50 rounded-lg border border-white/80">
+                      <div className="p-1.5 bg-blue-500/10 rounded-md">
+                        <Clock className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">ETA</p>
+                        <p className="font-semibold text-blue-700 text-sm">
+                          {bulkSendingState.estimatedTimeRemaining}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-purple-600" />
-                      <span>AI Enhanced: {bulkSendingState.aiEnhanced}</span>
+                    <div className="flex items-center space-x-2 p-3 bg-white/50 rounded-lg border border-white/80">
+                      <div className="p-1.5 bg-purple-500/10 rounded-md">
+                        <Sparkles className="h-4 w-4 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          AI Enhanced
+                        </p>
+                        <p className="font-semibold text-purple-700">
+                          {bulkSendingState.aiEnhanced}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="text-sm text-blue-700">
-                    <strong>Current:</strong> {bulkSendingState.currentEmail}
+                  <div className="p-3 bg-white/50 rounded-lg border border-white/80">
+                    <p className="text-sm font-medium text-blue-800 mb-1">
+                      Currently Processing:
+                    </p>
+                    <p className="text-sm text-blue-700 font-mono break-all">
+                      {bulkSendingState.currentEmail}
+                    </p>
                   </div>
 
-                  {/* Real-time logs */}
+                  {/* Enhanced Real-time logs */}
                   {bulkSendingState.logs.length > 0 && (
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-medium text-blue-800">
-                        Live Activity:
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-blue-800">
+                        Live Activity Log:
                       </h4>
-                      <div className="bg-white rounded border p-3 max-h-32 overflow-y-auto">
-                        {bulkSendingState.logs.map((log, index) => (
-                          <div
-                            key={index}
-                            className="text-xs text-gray-600 font-mono mb-1"
-                          >
-                            {log}
-                          </div>
-                        ))}
+                      <div className="bg-white/80 rounded-lg border border-white/80 p-4 max-h-32 overflow-y-auto">
+                        <div className="space-y-1">
+                          {bulkSendingState.logs.map((log, index) => (
+                            <div
+                              key={index}
+                              className="text-xs text-gray-600 font-mono leading-relaxed"
+                            >
+                              {log}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -433,96 +532,173 @@ export function ContactsTable() {
               </div>
             )}
 
-            {/* Selection and Send Controls */}
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="flex items-center space-x-2">
-                <Button
-                  onClick={handleSendEmails}
-                  disabled={
-                    selectedContacts.length === 0 || bulkSendingState.isActive
-                  }
-                  className="flex items-center gap-2"
-                >
-                  {bulkSendingState.isActive ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Sending Campaign...
-                    </>
-                  ) : (
-                    <>
-                      <Mail className="h-4 w-4" />
-                      Send {selectedContacts.length} AI-Personalized emails
-                    </>
-                  )}
-                </Button>
+            {/* Enhanced Selection and Send Controls */}
+            <div className="space-y-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <Button
+                    onClick={handleSendEmails}
+                    disabled={
+                      selectedContacts.length === 0 || bulkSendingState.isActive
+                    }
+                    className="h-10 px-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
+                    size="lg"
+                  >
+                    {bulkSendingState.isActive ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Sending Campaign...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <Mail className="h-4 w-4" />
+                        <span>
+                          Send {selectedContacts.length} AI-Personalized Email
+                          {selectedContacts.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    )}
+                  </Button>
+
+                  {selectedContacts.length > 0 &&
+                    !bulkSendingState.isActive && (
+                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                        <Badge variant="outline" className="text-xs">
+                          {selectedContacts.length} selected
+                        </Badge>
+                      </div>
+                    )}
+                </div>
               </div>
 
               {selectedContacts.length > 5 && !bulkSendingState.isActive && (
-                <Alert className="flex-1">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    Large campaign detected. Only first 5 emails will use AI
-                    enhancement to avoid rate limits.
+                <Alert className="border-amber-200/50 bg-amber-50/50">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800">
+                    <strong>Large campaign detected.</strong> Only the first 5
+                    emails will use AI enhancement to avoid rate limits.
                   </AlertDescription>
                 </Alert>
               )}
             </div>
 
-            {/* Contacts Table */}
-            <div className="rounded-md border">
+            {/* Enhanced Contacts Table */}
+            <div className="rounded-xl border border-border/50 overflow-hidden bg-card shadow-sm">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
+                  <TableRow className="border-border/50 bg-muted/30">
+                    <TableHead className="w-12 text-center">
                       <Checkbox
                         checked={selectedContacts.length === contacts.length}
                         onCheckedChange={handleSelectAll}
                         disabled={bulkSendingState.isActive}
+                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                       />
                     </TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Recruiter</TableHead>
-                    <TableHead>Added</TableHead>
-                    <TableHead className="w-12">Actions</TableHead>
+                    <TableHead className="font-semibold">Email</TableHead>
+                    <TableHead className="font-semibold">Name</TableHead>
+                    <TableHead className="font-semibold">Company</TableHead>
+                    <TableHead className="font-semibold">Role</TableHead>
+                    <TableHead className="font-semibold">Recruiter</TableHead>
+                    <TableHead className="font-semibold">Added</TableHead>
+                    <TableHead className="w-16 text-center font-semibold">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {contacts.map((contact) => (
-                    <TableRow key={contact.id}>
-                      <TableCell>
+                  {contacts.map((contact, index) => (
+                    <TableRow
+                      key={contact.id}
+                      className={`
+                        border-border/30 transition-all duration-200 hover:bg-muted/20
+                        ${
+                          selectedContacts.includes(contact.id)
+                            ? "bg-primary/5 border-primary/20"
+                            : ""
+                        }
+                        ${index % 2 === 0 ? "bg-muted/5" : ""}
+                      `}
+                    >
+                      <TableCell className="text-center">
                         <Checkbox
                           checked={selectedContacts.includes(contact.id)}
                           onCheckedChange={(checked) =>
                             handleSelectContact(contact.id, checked === true)
                           }
                           disabled={bulkSendingState.isActive}
+                          className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                         />
                       </TableCell>
-                      <TableCell className="font-medium">
-                        {contact.email}
+                      <TableCell className="font-medium text-foreground">
+                        <div className="flex items-center space-x-2">
+                          <div className="h-2 w-2 bg-green-500 rounded-full"></div>
+                          <span className="font-mono text-sm">
+                            {contact.email}
+                          </span>
+                        </div>
                       </TableCell>
-                      <TableCell>{contact.name || "-"}</TableCell>
-                      <TableCell>{contact.company_name || "-"}</TableCell>
+                      <TableCell>
+                        <span
+                          className={
+                            contact.name
+                              ? "text-foreground"
+                              : "text-muted-foreground italic"
+                          }
+                        >
+                          {contact.name || "No name"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={
+                            contact.company_name
+                              ? "text-foreground"
+                              : "text-muted-foreground italic"
+                          }
+                        >
+                          {contact.company_name || "No company"}
+                        </span>
+                      </TableCell>
                       <TableCell>
                         {contact.role ? (
-                          <Badge variant="outline">{contact.role}</Badge>
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-50 text-blue-700 border-blue-200"
+                          >
+                            {contact.role}
+                          </Badge>
                         ) : (
-                          "-"
+                          <span className="text-muted-foreground italic text-sm">
+                            No role
+                          </span>
                         )}
                       </TableCell>
-                      <TableCell>{contact.recruiter_name || "-"}</TableCell>
                       <TableCell>
-                        {new Date(contact.created_at).toLocaleDateString()}
+                        <span
+                          className={
+                            contact.recruiter_name
+                              ? "text-foreground"
+                              : "text-muted-foreground italic"
+                          }
+                        >
+                          {contact.recruiter_name || "No recruiter"}
+                        </span>
                       </TableCell>
                       <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <time className="text-sm text-muted-foreground font-mono">
+                            {new Date(contact.created_at).toLocaleDateString()}
+                          </time>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDeleteContact(contact.id)}
                           disabled={bulkSendingState.isActive}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
