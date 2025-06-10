@@ -54,7 +54,7 @@
     "nodemailer": "^6.10.1",
     "pg": "^8.16.0",
     "react": "^19",
-    "react-day-picker": "8.10.1",
+    "react-day-picker": "^9.7.0",
     "react-dom": "^19",
     "react-dropzone": "latest",
     "react-hook-form": "^7.54.1",
