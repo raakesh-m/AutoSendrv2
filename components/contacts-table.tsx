@@ -29,6 +29,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Mail,
   Trash2,
   RefreshCw,
@@ -37,6 +44,10 @@ import {
   AlertCircle,
   Users,
   Sparkles,
+  Paperclip,
+  File,
+  X,
+  Info,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -79,6 +90,9 @@ export function ContactsTable() {
   });
   const [campaignCompleted, setCampaignCompleted] = useState(false);
   const [eventSource, setEventSource] = useState<EventSource | null>(null);
+  const [selectedAttachments, setSelectedAttachments] = useState<number[]>([]);
+  const [availableAttachments, setAvailableAttachments] = useState<any[]>([]);
+  const [showAttachmentsDialog, setShowAttachmentsDialog] = useState(false);
   const { toast } = useToast();
 
   const fetchContacts = async () => {
@@ -101,8 +115,26 @@ export function ContactsTable() {
     }
   };
 
+  const fetchAttachments = async () => {
+    try {
+      const response = await fetch("/api/attachments");
+      if (!response.ok) throw new Error("Failed to fetch attachments");
+
+      const data = await response.json();
+      setAvailableAttachments(data.attachments || []);
+    } catch (error) {
+      console.error("Error fetching attachments:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch attachments",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     fetchContacts();
+    fetchAttachments();
   }, []);
 
   // Cleanup event source on unmount
@@ -130,6 +162,39 @@ export function ContactsTable() {
     }
   };
 
+  const handleAttachmentSelect = (attachmentId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedAttachments((prev) => [...prev, attachmentId]);
+    } else {
+      setSelectedAttachments((prev) =>
+        prev.filter((id) => id !== attachmentId)
+      );
+    }
+  };
+
+  // Helper function to safely close EventSource
+  const safeCloseEventSource = (
+    eventSource: EventSource | null,
+    context: string
+  ) => {
+    if (eventSource) {
+      console.log(
+        `Closing EventSource (${context}), current state:`,
+        eventSource.readyState
+      );
+      if (eventSource.readyState !== EventSource.CLOSED) {
+        try {
+          eventSource.close();
+          console.log(`EventSource closed successfully (${context})`);
+        } catch (error) {
+          console.log(`Error closing EventSource (${context}):`, error);
+        }
+      } else {
+        console.log(`EventSource already closed (${context})`);
+      }
+    }
+  };
+
   const handleSendEmails = async () => {
     if (selectedContacts.length === 0) {
       toast({
@@ -150,6 +215,10 @@ export function ContactsTable() {
       `/api/email/send/progress?sessionId=${sessionId}`
     );
     setEventSource(newEventSource);
+
+    // Fallback polling mechanism if SSE fails
+    let fallbackPolling: NodeJS.Timeout | null = null;
+    let sseWorking = false;
 
     // Initialize sending state
     setBulkSendingState({
@@ -172,6 +241,12 @@ export function ContactsTable() {
 
         if (data.type === "connected") {
           console.log("Connected to progress stream");
+          sseWorking = true;
+          // Clear any fallback polling since SSE is working
+          if (fallbackPolling) {
+            clearInterval(fallbackPolling);
+            fallbackPolling = null;
+          }
           return;
         }
 
@@ -211,8 +286,15 @@ export function ContactsTable() {
                 aiEnhanced: 0,
               });
               setCampaignCompleted(false);
-              newEventSource.close();
+
+              // Safely close EventSource during auto-reset
+              safeCloseEventSource(newEventSource, "auto-reset cleanup");
               setEventSource(null);
+
+              if (fallbackPolling) {
+                clearInterval(fallbackPolling);
+                fallbackPolling = null;
+              }
             }, 10000);
           }
         }
@@ -223,9 +305,151 @@ export function ContactsTable() {
 
     newEventSource.onerror = (error) => {
       console.error("SSE connection error:", error);
-      newEventSource.close();
-      setEventSource(null);
+      console.log("EventSource readyState:", newEventSource.readyState);
+      console.log("EventSource URL:", newEventSource.url);
+
+      // Don't immediately close and abandon - SSE will auto-reconnect
+      // Only close if we explicitly want to stop the connection
+      if (newEventSource.readyState === EventSource.CLOSED) {
+        console.log("SSE connection closed permanently, starting fallback");
+        setEventSource(null);
+        // Force start fallback polling immediately
+        if (!fallbackPolling) {
+          console.log("Starting immediate fallback polling due to SSE failure");
+          setBulkSendingState((prev) => ({
+            ...prev,
+            currentEmail: "Using fallback updates (SSE failed)...",
+          }));
+
+          fallbackPolling = setInterval(async () => {
+            try {
+              const response = await fetch(
+                `/api/email/send/progress/status?sessionId=${sessionId}`
+              );
+              if (response.ok) {
+                const data = await response.json();
+                if (
+                  data &&
+                  (data.type === "progress" || data.type === "completed")
+                ) {
+                  setBulkSendingState({
+                    isActive: !data.completed,
+                    progress: data.progress,
+                    currentEmail: data.currentEmail,
+                    sent: data.sent,
+                    failed: data.failed,
+                    total: data.total,
+                    logs: data.logs || [],
+                    estimatedTimeRemaining: data.estimatedTimeRemaining,
+                    aiEnhanced: data.aiEnhanced,
+                  });
+
+                  if (data.completed) {
+                    setCampaignCompleted(true);
+                    setSelectedContacts([]);
+                    clearInterval(fallbackPolling!);
+                    fallbackPolling = null;
+
+                    // Safely close EventSource when campaign completes via fallback
+                    if (
+                      newEventSource &&
+                      newEventSource.readyState !== EventSource.CLOSED
+                    ) {
+                      try {
+                        newEventSource.close();
+                      } catch (error) {
+                        console.log(
+                          "Error closing EventSource after fallback completion:",
+                          error
+                        );
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error("Fallback polling error:", error);
+            }
+          }, 1000);
+        }
+      } else {
+        console.log("SSE connection error, will retry automatically...");
+        console.log(
+          "Current readyState:",
+          newEventSource.readyState === EventSource.CONNECTING
+            ? "CONNECTING"
+            : newEventSource.readyState === EventSource.OPEN
+            ? "OPEN"
+            : "CLOSED"
+        );
+      }
     };
+
+    // Start fallback polling after a shorter delay if SSE doesn't connect
+    setTimeout(() => {
+      if (!sseWorking && !fallbackPolling) {
+        console.log(
+          "SSE not working after 2 seconds, starting fallback polling..."
+        );
+
+        // Update UI to show we're using fallback
+        setBulkSendingState((prev) => ({
+          ...prev,
+          currentEmail: "Connecting to progress updates (using fallback)...",
+        }));
+
+        fallbackPolling = setInterval(async () => {
+          try {
+            const response = await fetch(
+              `/api/email/send/progress/status?sessionId=${sessionId}`
+            );
+            if (response.ok) {
+              const data = await response.json();
+              if (
+                data &&
+                (data.type === "progress" || data.type === "completed")
+              ) {
+                setBulkSendingState({
+                  isActive: !data.completed,
+                  progress: data.progress,
+                  currentEmail: data.currentEmail,
+                  sent: data.sent,
+                  failed: data.failed,
+                  total: data.total,
+                  logs: data.logs || [],
+                  estimatedTimeRemaining: data.estimatedTimeRemaining,
+                  aiEnhanced: data.aiEnhanced,
+                });
+
+                if (data.completed) {
+                  setCampaignCompleted(true);
+                  setSelectedContacts([]);
+                  clearInterval(fallbackPolling!);
+                  fallbackPolling = null;
+
+                  // Safely close EventSource when campaign completes
+                  if (
+                    newEventSource &&
+                    newEventSource.readyState !== EventSource.CLOSED
+                  ) {
+                    try {
+                      newEventSource.close();
+                    } catch (error) {
+                      console.log(
+                        "Error closing EventSource after immediate fallback completion:",
+                        error
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error("Fallback polling error:", error);
+          }
+        }, 1000);
+      }
+    }, 3000);
 
     try {
       // Start the actual email sending process
@@ -236,6 +460,7 @@ export function ContactsTable() {
           contactIds: selectedContacts,
           useAiCustomization: true,
           sessionId: sessionId,
+          attachmentIds: selectedAttachments,
         }),
       });
 
@@ -263,10 +488,13 @@ export function ContactsTable() {
         variant: "destructive",
       });
 
-      // Clean up event source on error
-      if (newEventSource) {
-        newEventSource.close();
-        setEventSource(null);
+      // Clean up event source and polling on error
+      safeCloseEventSource(newEventSource, "error cleanup");
+      setEventSource(null);
+
+      if (fallbackPolling) {
+        clearInterval(fallbackPolling);
+        fallbackPolling = null;
       }
 
       setTimeout(() => {
@@ -281,31 +509,89 @@ export function ContactsTable() {
           estimatedTimeRemaining: "",
           aiEnhanced: 0,
         });
-      }, 3000);
+      }, 2000); // Reduced from 3 seconds to 2 seconds
     }
   };
 
   const handleDeleteContact = async (contactId: number) => {
     try {
+      console.log(`Attempting to delete contact ${contactId}`);
+
+      // Add timeout to the fetch request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       const response = await fetch(`/api/contacts?id=${contactId}`, {
         method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
       });
 
-      if (!response.ok) throw new Error("Failed to delete contact");
+      clearTimeout(timeoutId);
+      console.log(
+        "Delete response status:",
+        response.status,
+        response.statusText
+      );
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = await response.text();
+        }
+        console.error("Delete failed:", errorData);
+
+        // Handle specific error cases
+        if (
+          response.status === 409 &&
+          errorData?.code === "FOREIGN_KEY_CONSTRAINT"
+        ) {
+          throw new Error(
+            "This contact has email history and cannot be deleted. Contact support if you need to remove this record."
+          );
+        } else if (response.status === 404) {
+          throw new Error("Contact not found or already deleted");
+        } else {
+          throw new Error(
+            `Failed to delete contact: ${response.status} ${response.statusText}`
+          );
+        }
+      }
+
+      const result = await response.json();
+      console.log("Delete successful:", result);
 
       toast({
         title: "Contact deleted",
-        description: "Contact has been removed successfully",
+        description:
+          result.emailSendsDeleted > 0
+            ? `Contact and ${result.emailSendsDeleted} email record(s) deleted successfully`
+            : "Contact has been removed successfully",
       });
 
-      fetchContacts(); // Refresh the list
+      // Refresh the list after successful deletion
+      await fetchContacts();
     } catch (error) {
       console.error("Error deleting contact:", error);
-      toast({
-        title: "Error",
-        description: "Failed to delete contact",
-        variant: "destructive",
-      });
+
+      if (error instanceof Error && error.name === "AbortError") {
+        toast({
+          title: "Request timeout",
+          description: "The delete request timed out. Please try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description:
+            error instanceof Error ? error.message : "Failed to delete contact",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -562,21 +848,34 @@ export function ContactsTable() {
 
                   {selectedContacts.length > 0 &&
                     !bulkSendingState.isActive && (
-                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                      <div className="flex items-center space-x-3 text-sm text-muted-foreground">
                         <Badge variant="outline" className="text-xs">
                           {selectedContacts.length} selected
                         </Badge>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowAttachmentsDialog(true)}
+                          className="flex items-center space-x-2"
+                        >
+                          <Paperclip className="h-4 w-4" />
+                          <span>
+                            Attachments ({selectedAttachments.length})
+                          </span>
+                        </Button>
                       </div>
                     )}
                 </div>
               </div>
 
               {selectedContacts.length > 5 && !bulkSendingState.isActive && (
-                <Alert className="border-amber-200/50 bg-amber-50/50">
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800">
-                    <strong>Large campaign detected.</strong> Only the first 5
-                    emails will use AI enhancement to avoid rate limits.
+                <Alert className="border-blue-200/50 bg-blue-50/50">
+                  <Info className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-800">
+                    <strong>AI Enhancement Required.</strong> All emails will be
+                    AI-enhanced or skipped if AI fails. No template-only emails
+                    will be sent.
                   </AlertDescription>
                 </Alert>
               )}
@@ -711,6 +1010,92 @@ export function ContactsTable() {
           </>
         )}
       </CardContent>
+
+      {/* Attachments Selection Dialog */}
+      <Dialog
+        open={showAttachmentsDialog}
+        onOpenChange={setShowAttachmentsDialog}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Select Attachments for Bulk Email</DialogTitle>
+            <DialogDescription>
+              Choose files to attach to all emails in this campaign. Selected
+              attachments will be included with every email sent.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {availableAttachments.length === 0 ? (
+              <div className="text-center py-8">
+                <File className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">
+                  No attachments available. Upload some files in the{" "}
+                  <a
+                    href="/attachments"
+                    className="text-primary hover:underline"
+                  >
+                    Attachments page
+                  </a>{" "}
+                  first.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {availableAttachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <Checkbox
+                      checked={selectedAttachments.includes(attachment.id)}
+                      onCheckedChange={(checked) =>
+                        handleAttachmentSelect(attachment.id, checked === true)
+                      }
+                    />
+                    <File className="h-5 w-5 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{attachment.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {attachment.mime_type} •{" "}
+                        {Math.round(attachment.file_size / 1024)} KB
+                      </p>
+                      {attachment.description && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {attachment.description}
+                        </p>
+                      )}
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {attachment.category}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedAttachments.length > 0 && (
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm font-medium text-muted-foreground">
+                  {selectedAttachments.length} attachment(s) selected
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  These will be attached to all {selectedContacts.length} emails
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowAttachmentsDialog(false)}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

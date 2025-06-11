@@ -85,10 +85,51 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await query("DELETE FROM contacts WHERE id = $1", [id]);
-    return NextResponse.json({ message: "Contact deleted successfully" });
+    // Check if contact has email sends
+    const emailSendsCheck = await query(
+      "SELECT COUNT(*) as count FROM email_sends WHERE contact_id = $1",
+      [id]
+    );
+
+    const emailSendCount = parseInt(emailSendsCheck.rows[0].count);
+
+    if (emailSendCount > 0) {
+      // Option 1: Delete related email sends first (CASCADE delete)
+      await query("DELETE FROM email_sends WHERE contact_id = $1", [id]);
+      console.log(
+        `Deleted ${emailSendCount} email send records for contact ${id}`
+      );
+    }
+
+    // Now delete the contact
+    const deleteResult = await query(
+      "DELETE FROM contacts WHERE id = $1 RETURNING *",
+      [id]
+    );
+
+    if (deleteResult.rowCount === 0) {
+      return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      message: "Contact deleted successfully",
+      emailSendsDeleted: emailSendCount,
+    });
   } catch (error) {
     console.error("Error deleting contact:", error);
+
+    // Handle specific PostgreSQL foreign key constraint errors
+    if (error instanceof Error && error.message.includes("23503")) {
+      return NextResponse.json(
+        {
+          error:
+            "Cannot delete contact because it has associated email records. Please contact support.",
+          code: "FOREIGN_KEY_CONSTRAINT",
+        },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
       { error: "Failed to delete contact" },
       { status: 500 }

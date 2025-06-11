@@ -117,16 +117,16 @@ Raakesh`,
               Bulk Emails
             </h5>
             <p className="text-xs text-blue-700">
-              AI enhanced for first 5 emails only (rate limit protection)
+              AI required - emails skipped if AI fails
             </p>
           </div>
         </div>
 
         <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
           <p className="text-xs text-amber-800">
-            <strong>Efficiency:</strong> Uses proven template with minimal AI
-            calls to avoid rate limits. Your emails always get sent, whether AI
-            is available or not.
+            <strong>Quality First:</strong> Only AI-enhanced emails are sent. If
+            AI enhancement fails due to rate limits or errors, those emails are
+            skipped to maintain quality standards.
           </p>
         </div>
       </CardContent>
