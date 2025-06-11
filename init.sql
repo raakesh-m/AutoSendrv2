@@ -91,6 +91,21 @@ CREATE TABLE email_attachments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create groq_api_keys table for storing multiple API keys for rotation
+CREATE TABLE groq_api_keys (
+    id SERIAL PRIMARY KEY,
+    key_name VARCHAR(255) NOT NULL,
+    api_key VARCHAR(500) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    usage_count INTEGER DEFAULT 0,
+    last_used_at TIMESTAMP,
+    daily_reset_at DATE DEFAULT CURRENT_DATE,
+    rate_limit_hit_at TIMESTAMP,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Insert default email template based on template.md
 INSERT INTO email_templates (name, subject, body, variables) VALUES (
     'Default Application Template',

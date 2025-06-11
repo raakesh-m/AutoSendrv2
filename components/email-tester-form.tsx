@@ -94,92 +94,40 @@ export function EmailTesterForm() {
       addLog("Starting email preparation");
       updateProgress("Personalizing template...", 20);
 
-      // Replace placeholders with actual values
-      const role = formData.position || "Software Developer";
-      const recruiterName = formData.recruiterName || "there";
-
-      // Get the template and personalize it
-      addLog(`Personalizing template for ${formData.companyName}`);
-      updateProgress("Enhancing with AI...", 40);
-
-      // Try minimal AI enhancement
-      let aiEnhanced = false;
-      let aiMessage = "";
-      let personalizedSubject = `Application for ${role} Opportunity at ${formData.companyName} – Raakesh`;
-      let personalizedBody = `Hi ${recruiterName},
-
-I'm Raakesh, a frontend developer with around 3 years of experience building clean, responsive, and full-stack web apps. I came across ${formData.companyName} and would love to apply for a ${role} role on your team.
-
-Design, develop, deliver — that's my cycle. I focus on clean UI, performance, and building real-world products with modern tools.
-
-Here are a couple of recent projects:
-• Prodpix – My first complete full-stack application from design to deployment, an AI product imagery platform that's generated 1,000+ images: https://prodpix.com
-• AIChat – Polished chatbot interface with intuitive UI/UX powered by LLaMA models: https://cyberpunkchat.vercel.app/
-
-Portfolio & resume: https://raakesh.space
-GitHub: https://github.com/raakesh-m
-
-Happy to connect if this aligns with what you're looking for in ${formData.companyName}.
-
-Looking forward to your thoughts,
-Raakesh`;
-
-      try {
-        addLog("Attempting AI enhancement...");
-        const aiResponse = await fetch("/api/email/optimize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            subject: personalizedSubject,
-            body: personalizedBody,
-            companyName: formData.companyName,
-            position: role,
-            recruiterName: recruiterName,
-            minimal: true,
-          }),
-        });
-
-        const aiData = await aiResponse.json();
-
-        if (aiResponse.ok && !aiData.fallback) {
-          personalizedSubject = aiData.optimizedSubject || personalizedSubject;
-          personalizedBody = aiData.optimizedBody || personalizedBody;
-          aiEnhanced = true;
-          addLog("✨ AI enhancement applied successfully");
-        } else {
-          aiMessage = aiData.message || "AI enhancement unavailable";
-          addLog(`⚠️ AI enhancement failed: ${aiMessage}`);
-        }
-      } catch (aiError) {
-        addLog("⚠️ AI enhancement failed, using basic template");
-        aiMessage = "Using basic template personalization";
-      }
+      addLog(`Preparing email for ${formData.companyName}...`);
+      updateProgress("Processing with template and AI...", 40);
 
       updateProgress("Sending email...", 70);
       addLog(`Sending email to ${formData.recipientEmail}...`);
 
-      // Send the email
+      // Send the email using unified system
       const response = await fetch("/api/email/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: formData.recipientEmail,
-          subject: personalizedSubject,
-          body: personalizedBody,
+          companyName: formData.companyName,
+          position: formData.position,
+          recruiterName: formData.recruiterName,
+          useAiCustomization: true, // Always use AI for single emails
         }),
       });
 
       if (response.ok) {
+        const result = await response.json();
         updateProgress("Email sent successfully!", 100);
         addLog(`✅ Email sent successfully to ${formData.recipientEmail}`);
+        addLog(`📧 Template: ${result.template}`);
+        addLog(`🤖 AI Enhanced: ${result.aiEnhanced ? "Yes" : "No"}`);
+        addLog(`📎 Attachments: ${result.attachments}`);
 
-        const successTitle = aiEnhanced
+        const successTitle = result.aiEnhanced
           ? "🎉 AI-Enhanced Email Sent!"
           : "📧 Email Sent Successfully!";
 
-        const successDescription = aiEnhanced
-          ? `AI-enhanced email delivered to ${formData.companyName}`
-          : `Personalized email delivered to ${formData.companyName}`;
+        const successDescription = result.aiEnhanced
+          ? `AI-enhanced email delivered to ${formData.companyName} with ${result.attachments} attachment(s)`
+          : `Personalized email delivered to ${formData.companyName} with ${result.attachments} attachment(s)`;
 
         toast({
           title: successTitle,
@@ -205,7 +153,15 @@ Raakesh`;
           });
         }, 3000);
       } else {
-        throw new Error("Failed to send email");
+        const errorResult = await response.json();
+        addLog(
+          `❌ ${errorResult.error}: ${
+            errorResult.message || errorResult.details
+          }`
+        );
+        throw new Error(
+          errorResult.message || errorResult.error || "Failed to send email"
+        );
       }
     } catch (error) {
       addLog("❌ Email sending failed");

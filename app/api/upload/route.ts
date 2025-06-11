@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import { query } from "@/lib/db";
 
-// Initialize Groq client
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+// Initialize Groq client function that uses key manager
+async function createGroqClient() {
+  const { groqKeyManager } = await import("@/lib/groq-key-manager");
+  const apiKey = await groqKeyManager.getAvailableKey();
+
+  if (!apiKey) {
+    throw new Error("No Groq API keys available");
+  }
+
+  return new Groq({ apiKey });
+}
 
 // Global session store (in production, use Redis or database)
 declare global {
@@ -56,7 +64,14 @@ async function batchEnrichContacts(
   sessionId: string
 ): Promise<any[]> {
   try {
-    if (!process.env.GROQ_API_KEY || contacts.length === 0) {
+    // Check if API keys are available
+    const { groqKeyManager } = await import("@/lib/groq-key-manager");
+    const hasApiKeys = await groqKeyManager.getAvailableKey();
+
+    if (!hasApiKeys || contacts.length === 0) {
+      console.log(
+        "⚠️ Skipping AI enrichment - no API keys available or no contacts"
+      );
       return contacts.map((contact) => basicMapping(contact));
     }
 
@@ -119,6 +134,7 @@ Respond with a JSON array of ${
   "recruiter_name": "enhanced_or_original_recruiter"
 }`;
 
+        const groq = await createGroqClient();
         const completion = await groq.chat.completions.create({
           messages: [{ role: "user", content: batchPrompt }],
           model: "llama3-8b-8192",
@@ -409,7 +425,7 @@ export async function POST(request: NextRequest) {
         message: `Successfully processed ${enrichedContacts.length} contacts from ${files.length} file(s) with AI enrichment in ${totalTime}s`,
         contacts: saveResult.contacts,
         totalProcessed: enrichedContacts.length,
-        aiEnriched: process.env.GROQ_API_KEY ? enrichedContacts.length : 0,
+        aiEnriched: enrichedContacts.length, // AI enrichment is now database-managed
         processingTime: `${totalTime}s`,
       },
     });

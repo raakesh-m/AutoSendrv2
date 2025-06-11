@@ -162,7 +162,6 @@ export async function POST(request: NextRequest) {
     let skippedCount = 0;
     // AI enhancement is mandatory - emails are only sent if AI enhancement succeeds
     const startTime = Date.now();
-    let lastAiRequestTime = 0;
     let aiQuotaExhausted = false; // Track if we've hit daily/rate limits
 
     // Initialize progress tracking
@@ -191,6 +190,48 @@ export async function POST(request: NextRequest) {
           : "Disabled"
       }`
     );
+
+    if (useAiCustomization) {
+      // Log API key status at campaign start
+      const { groqKeyManager } = await import("@/lib/groq-key-manager");
+      const keyStats = await groqKeyManager.getKeyStats();
+      console.log(`🔑 API Key Status:`);
+      console.log(
+        `   📊 Total Keys: ${keyStats.totalKeys} | Active: ${keyStats.activeKeys} | Rate Limited: ${keyStats.rateLimitedKeys}`
+      );
+      console.log(
+        `   📈 Daily Capacity: ${keyStats.usedToday}/${keyStats.totalDailyCapacity} requests used`
+      );
+      console.log(
+        `   🎯 Available today: ${
+          keyStats.totalDailyCapacity - keyStats.usedToday
+        } requests`
+      );
+
+      // Add key info to progress logs
+      updateProgress(campaignSessionId, {
+        type: "progress",
+        progress: 0,
+        currentEmail: "Initializing API keys...",
+        sent: 0,
+        failed: 0,
+        skipped: 0,
+        total: totalContacts,
+        aiEnhanced: 0,
+        estimatedTimeRemaining: "Calculating...",
+        logs: [
+          `🚀 Starting bulk email campaign for ${totalContacts} contacts`,
+          `🔑 ${keyStats.activeKeys} API keys available (${
+            keyStats.totalDailyCapacity - keyStats.usedToday
+          } requests remaining today)`,
+          keyStats.rateLimitedKeys > 0
+            ? `⚠️ ${keyStats.rateLimitedKeys} keys currently rate limited`
+            : `✅ All keys ready for use`,
+        ],
+        completed: false,
+      });
+    }
+
     console.log(`⏰ Started at: ${new Date().toLocaleTimeString()}\n`);
 
     // Process each contact
@@ -204,7 +245,7 @@ export async function POST(request: NextRequest) {
       );
 
       // Update real-time progress
-      const currentLogs = [
+      let currentLogs = [
         `📤 [${currentIndex}/${totalContacts}] Processing ${contact.email} (${progressPercent}%)`,
       ];
 
@@ -249,7 +290,7 @@ export async function POST(request: NextRequest) {
         let aiEnhanced = false;
         let shouldSendEmail = true; // Flag to determine if email should be sent
 
-        if (useAiCustomization && process.env.GROQ_API_KEY) {
+        if (useAiCustomization) {
           // If quota is exhausted, skip remaining emails
           if (aiQuotaExhausted) {
             console.log(`   🚫 Skipping ${contact.email} - AI quota exhausted`);
@@ -283,46 +324,47 @@ export async function POST(request: NextRequest) {
           } else {
             // Try AI enhancement
             try {
-              // Rate limiting: Ensure at least 2 seconds between AI requests
-              const now = Date.now();
-              const timeSinceLastRequest = now - lastAiRequestTime;
-              const minDelay = 2100; // 2.1 seconds to be safe
+              console.log(
+                `🤖 Starting AI enhancement for ${contact.name} (${contact.email})...`
+              );
 
-              if (timeSinceLastRequest < minDelay) {
-                const waitTime = minDelay - timeSinceLastRequest;
+              // Log which key will be used (before the call)
+              const { groqKeyManager } = await import("@/lib/groq-key-manager");
+              const selectedKey = await groqKeyManager.getAvailableKey();
+
+              if (!selectedKey) {
                 console.log(
-                  `   ⏱️ Rate limiting: waiting ${Math.round(waitTime)}ms...`
+                  `❌ No API keys available - skipping ${contact.name}`
                 );
-                await new Promise((resolve) => setTimeout(resolve, waitTime));
+                updateProgress(campaignSessionId, {
+                  type: "progress",
+                  progress: Math.round((i / totalContacts) * 100),
+                  currentEmail: `Skipped: ${contact.name} (no API keys)`,
+                  sent: emailResults.filter((r) => r.status === "sent").length,
+                  failed: emailResults.filter((r) => r.status === "failed")
+                    .length,
+                  skipped: skippedCount + 1,
+                  total: totalContacts,
+                  aiEnhanced: aiEnhanced,
+                  estimatedTimeRemaining: estimateTimeRemaining(
+                    startTime,
+                    i,
+                    totalContacts
+                  ),
+                  logs: currentLogs
+                    .slice(-4)
+                    .concat([
+                      `❌ Skipped ${contact.name} - No API keys available`,
+                      `📊 Total skipped due to rate limits: ${
+                        skippedCount + 1
+                      }`,
+                    ]),
+                  completed: false,
+                });
+                skippedCount++;
+                continue;
               }
 
-              console.log(`   🤖 Applying AI enhancement...`);
-
-              updateProgress(campaignSessionId, {
-                type: "progress",
-                progress: Math.round(
-                  ((currentIndex - 0.5) / totalContacts) * 100
-                ),
-                currentEmail: `AI enhancing for ${contact.email}...`,
-                sent: emailResults.filter((r) => r.status === "sent").length,
-                failed: emailResults.filter((r) => r.status === "failed")
-                  .length,
-                skipped: skippedCount,
-                total: totalContacts,
-                aiEnhanced: emailResults.filter((r) => r.aiEnhanced).length,
-                estimatedTimeRemaining: estimateTimeRemaining(
-                  currentIndex - 1,
-                  totalContacts,
-                  startTime
-                ),
-                logs: [...currentLogs, `   🤖 Applying AI enhancement...`],
-                completed: false,
-              });
-
-              // Update last request time before making the call
-              lastAiRequestTime = Date.now();
-
-              // Use the shared enhancement function for consistency
               const enhancementResult = await enhanceEmail({
                 subject: personalizedSubject,
                 body: personalizedBody,
@@ -337,96 +379,91 @@ export async function POST(request: NextRequest) {
                 personalizedBody = enhancementResult.body;
                 aiUsageCount++;
                 aiEnhanced = true;
-                console.log(`   ✨ AI enhancement applied successfully`);
+                console.log(`✅ AI enhancement completed for ${contact.name}`);
+                console.log(`   📝 Subject: "${personalizedSubject}"`);
+
+                // Update progress with key rotation info
+                currentLogs = currentLogs
+                  .slice(-4)
+                  .concat([
+                    `✅ AI enhanced email for ${contact.name}`,
+                    `🎯 Key rotation working smoothly`,
+                    `📈 AI Success Rate: ${Math.round(
+                      (aiUsageCount / (i + 1)) * 100
+                    )}%`,
+                  ]);
               } else {
                 console.log(
-                  `   ❌ AI enhancement failed: ${enhancementResult.message}`
+                  `❌ AI enhancement failed for ${contact.name} - ${
+                    enhancementResult.error || "Unknown error"
+                  }`
                 );
 
-                // If AI fails, skip this email entirely
-                skippedCount++;
-                shouldSendEmail = false;
-
-                emailResults.push({
-                  contact: contact.email,
-                  status: "skipped",
-                  reason: `AI failed: ${enhancementResult.message}`,
-                  aiEnhanced: false,
-                });
+                currentLogs = currentLogs
+                  .slice(-4)
+                  .concat([
+                    `❌ Skipped ${contact.name} - AI enhancement failed`,
+                    `🔧 Reason: ${enhancementResult.error || "Unknown error"}`,
+                    `📊 Skipped count: ${skippedCount + 1}`,
+                  ]);
 
                 updateProgress(campaignSessionId, {
                   type: "progress",
-                  progress: Math.round((currentIndex / totalContacts) * 100),
-                  currentEmail: `⏭️ Skipped: ${contact.email} (AI failed)`,
+                  progress: Math.round((i / totalContacts) * 100),
+                  currentEmail: `Skipped: ${contact.name} (AI failed)`,
                   sent: emailResults.filter((r) => r.status === "sent").length,
                   failed: emailResults.filter((r) => r.status === "failed")
                     .length,
-                  skipped: skippedCount,
+                  skipped: skippedCount + 1,
                   total: totalContacts,
-                  aiEnhanced: emailResults.filter((r) => r.aiEnhanced).length,
+                  aiEnhanced: aiEnhanced,
                   estimatedTimeRemaining: estimateTimeRemaining(
-                    currentIndex,
-                    totalContacts,
-                    startTime
+                    startTime,
+                    i,
+                    totalContacts
                   ),
-                  logs: [
-                    ...currentLogs,
-                    `   ⏭️ Skipped - AI enhancement failed`,
-                  ],
+                  logs: currentLogs,
                   completed: false,
                 });
-
-                // Check if we should stop trying AI for remaining emails
-                if (
-                  enhancementResult.error === "AI rate limit reached" ||
-                  enhancementResult.error === "AI quota exceeded"
-                ) {
-                  console.log(
-                    `   🚫 AI quota exhausted, will skip remaining emails`
-                  );
-                  aiQuotaExhausted = true;
-                }
+                skippedCount++;
+                continue;
               }
-            } catch (aiError) {
-              console.log(
-                `   ❌ AI enhancement error: ${
-                  aiError instanceof Error
-                    ? aiError.message
-                    : "Unknown AI error"
-                }`
+            } catch (error) {
+              console.error(
+                `💥 AI enhancement error for ${contact.name}:`,
+                error
               );
 
-              // If AI throws an error, skip this email
-              skippedCount++;
-              shouldSendEmail = false;
-
-              emailResults.push({
-                contact: contact.email,
-                status: "skipped",
-                reason: `AI error: ${
-                  aiError instanceof Error ? aiError.message : "Unknown error"
-                }`,
-                aiEnhanced: false,
-              });
+              currentLogs = currentLogs
+                .slice(-4)
+                .concat([
+                  `💥 Error enhancing ${contact.name}`,
+                  `🔧 Error: ${
+                    error instanceof Error ? error.message : "Unknown error"
+                  }`,
+                  `📊 Skipped count: ${skippedCount + 1}`,
+                ]);
 
               updateProgress(campaignSessionId, {
                 type: "progress",
-                progress: Math.round((currentIndex / totalContacts) * 100),
-                currentEmail: `⏭️ Skipped: ${contact.email} (AI error)`,
+                progress: Math.round((i / totalContacts) * 100),
+                currentEmail: `Skipped: ${contact.name} (AI error)`,
                 sent: emailResults.filter((r) => r.status === "sent").length,
                 failed: emailResults.filter((r) => r.status === "failed")
                   .length,
-                skipped: skippedCount,
+                skipped: skippedCount + 1,
                 total: totalContacts,
-                aiEnhanced: emailResults.filter((r) => r.aiEnhanced).length,
+                aiEnhanced: aiEnhanced,
                 estimatedTimeRemaining: estimateTimeRemaining(
-                  currentIndex,
-                  totalContacts,
-                  startTime
+                  startTime,
+                  i,
+                  totalContacts
                 ),
-                logs: [...currentLogs, `   ⏭️ Skipped - AI error occurred`],
+                logs: currentLogs,
                 completed: false,
               });
+              skippedCount++;
+              continue;
             }
           }
         } else if (!useAiCustomization) {
