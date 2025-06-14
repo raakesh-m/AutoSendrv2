@@ -1,239 +1,296 @@
-# AutoSendr Deployment Guide
+# AutoSendr Production Deployment Guide
 
-This guide will help you deploy AutoSendr on your local machine or server.
+This guide will help you deploy AutoSendr to production using Vercel and Neon PostgreSQL.
 
 ## Prerequisites
 
-- **Docker Desktop** (required)
 - **Git** (required)
-- **Gmail account** with 2FA enabled (for email sending)
+- **Vercel account** (for hosting)
+- **Neon account** (for PostgreSQL database)
+- **Google Cloud Console access** (for OAuth)
 - **Groq API account** (optional, for AI features)
 
-## Quick Setup (5 minutes)
+## Production Setup (10 minutes)
 
-### 1. Clone and Setup
+### 1. Database Setup (Neon PostgreSQL)
 
-```bash
-# Clone the repository
-git clone https://github.com/your-username/autosendr.git
-cd autosendr
+1. **Create Neon Project**:
 
-# Copy environment template
-cp .env.example .env
-```
+   - Go to [Neon Console](https://console.neon.tech/)
+   - Create a new project
+   - Copy the connection string
 
-### 2. Configure Environment Variables
+2. **Database Schema**:
+   - The application will automatically create tables on first run
+   - No manual schema setup required
 
-Edit the `.env` file with your settings:
+### 2. Environment Configuration
 
-```bash
-# Required: Database (leave as-is for Docker setup)
-DATABASE_URL=postgresql://autosendr_user:autosendr_password@localhost:5432/autosendr
-
-# Required: Gmail Configuration
-GMAIL_EMAIL=your-email@gmail.com
-GMAIL_APP_PASSWORD=your-gmail-app-password
-
-# Optional: AI Features
-GROQ_API_KEY=your-groq-api-key-here
-```
-
-### 3. Start the Application
+Create a `.env.local` file for local development:
 
 ```bash
-# Make start script executable
-chmod +x start.sh
+# Database (Neon PostgreSQL)
+DATABASE_URL=postgresql://username:password@host/database?sslmode=require
 
-# Start everything
-./start.sh
+# Authentication (NextAuth.js)
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your-generated-secret-key
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# AI Features (Optional)
+GROQ_API_KEY=your-groq-api-key
 ```
 
-**Alternative:**
+### 3. Google OAuth Setup
 
-```bash
-docker-compose up --build -d
-```
+1. **Create OAuth Credentials**:
 
-### 4. Access the Application
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select existing
+   - Enable Google+ API
+   - Create OAuth 2.0 credentials
 
-- **Web Interface**: http://localhost:3000
-- **Database**: localhost:5432
+2. **Configure Redirect URIs**:
+   - Development: `http://localhost:3000/api/auth/callback/google`
+   - Production: `https://your-app.vercel.app/api/auth/callback/google`
+
+### 4. Deploy to Vercel
+
+1. **Connect Repository**:
+
+   ```bash
+   # Push to GitHub
+   git add .
+   git commit -m "Production deployment"
+   git push origin main
+   ```
+
+2. **Deploy on Vercel**:
+
+   - Go to [Vercel Dashboard](https://vercel.com/dashboard)
+   - Import your GitHub repository
+   - Configure environment variables (see below)
+   - Deploy
+
+3. **Environment Variables for Production**:
+   Set these in your Vercel dashboard:
+   ```
+   DATABASE_URL=your-neon-connection-string
+   NEXTAUTH_URL=https://your-app.vercel.app
+   NEXTAUTH_SECRET=your-generated-secret
+   GOOGLE_CLIENT_ID=your-google-client-id
+   GOOGLE_CLIENT_SECRET=your-google-client-secret
+   GROQ_API_KEY=your-groq-api-key
+   ```
+
+### 5. Post-Deployment Setup
+
+1. **Test Authentication**:
+
+   - Visit your deployed app
+   - Sign in with Google
+   - Verify user creation works
+
+2. **Configure Email Settings**:
+   - Each user configures their own email credentials
+   - Go to Settings → Email Setup
+   - Test email sending functionality
 
 ## Configuration Details
 
-### Gmail App Password Setup
+### Neon PostgreSQL Setup
 
-1. **Enable 2-Factor Authentication**:
+1. **Create Database**:
 
-   - Go to Google Account → Security
-   - Turn on 2-Step Verification
+   - Sign up at [Neon](https://neon.tech/)
+   - Create a new project
+   - Note the connection string
 
-2. **Generate App Password**:
-   - Go to Google Account → Security → App passwords
-   - Select "Mail" as the app
-   - Copy the generated 16-character password
-   - Use this in your `.env` file (not your regular Gmail password)
+2. **Connection String Format**:
 
-### Groq API Setup (Optional)
+   ```
+   postgresql://username:password@host/database?sslmode=require
+   ```
 
-1. **Sign up**: Visit [Groq Console](https://console.groq.com/)
-2. **Create API Key**: Generate a new API key
-3. **Add to .env**: Paste the key in your `.env` file
+3. **Database Features**:
+   - Automatic scaling
+   - Built-in connection pooling
+   - Serverless architecture
+   - No maintenance required
 
-## Data Storage Locations
+### Security Configuration
 
-### Your Data is Stored In:
+1. **NextAuth Secret**:
 
-1. **Database**: Docker volume `autosendr_postgres_data`
+   ```bash
+   # Generate a secure secret
+   openssl rand -base64 32
+   ```
 
-   - Templates, AI rules, contacts, email history
-   - Persists between container restarts
+2. **Environment Variables**:
+   - Never commit `.env` files to version control
+   - Use Vercel's environment variable management
+   - Separate development and production configs
 
-2. **Uploaded Files**: Docker volume `autosendr_uploads_data`
+### AI Features Setup (Optional)
 
-   - Resumes, portfolios, attachments
-   - Persists between container restarts
+1. **Groq API**:
 
-3. **Configuration**: `.env` file
-   - Email settings, API keys
-   - Keep this file secure and private
+   - Sign up at [Groq Console](https://console.groq.com/)
+   - Create API key
+   - Add to environment variables
 
-### Backup Your Data
+2. **AI Rules Management**:
+   - Users can customize AI behavior
+   - Default rules created automatically
+   - Per-user AI rule isolation
 
-```bash
-# Backup database
-docker-compose exec db pg_dump -U autosendr_user autosendr > autosendr-backup.sql
+## Data Storage & Architecture
 
-# Backup uploaded files
-docker cp autosendr-app-1:/app/uploads ./uploads-backup
+### Multi-User Data Isolation
 
-# Restore database (if needed)
-docker-compose exec -T db psql -U autosendr_user autosendr < autosendr-backup.sql
-```
+- **Users**: Each user has isolated data
+- **Templates**: User-specific email templates
+- **Contacts**: User-specific contact lists
+- **Attachments**: User-specific file uploads
+- **Email History**: User-specific send logs
+- **SMTP Config**: User-specific email credentials
+
+### File Storage
+
+- **Attachments**: Stored in `/uploads` directory
+- **Metadata**: Stored in Neon PostgreSQL
+- **Persistence**: Files persist across deployments
+
+## Monitoring & Maintenance
+
+### Application Health
+
+1. **Health Check Endpoint**:
+
+   - Visit `/health` to check system status
+   - Monitors database connectivity
+   - Verifies essential services
+
+2. **Error Monitoring**:
+   - Check Vercel function logs
+   - Monitor database performance in Neon console
+   - Track email delivery rates
+
+### Database Management
+
+1. **Backup Strategy**:
+
+   - Neon provides automatic backups
+   - Point-in-time recovery available
+   - No manual backup required
+
+2. **Performance Monitoring**:
+   - Monitor query performance in Neon console
+   - Track connection usage
+   - Scale compute as needed
 
 ## Troubleshooting
 
-### Application Won't Start
+### Common Issues
 
-```bash
-# Check if Docker is running
-docker --version
+1. **Database Connection**:
 
-# Check container logs
-docker-compose logs app
-docker-compose logs db
+   ```bash
+   # Test connection string
+   psql "your-connection-string" -c "SELECT 1;"
+   ```
 
-# Restart everything
-docker-compose down
-docker-compose up --build
-```
+2. **Authentication Issues**:
 
-### Database Issues
+   - Verify Google OAuth redirect URIs
+   - Check NEXTAUTH_URL matches deployment URL
+   - Ensure NEXTAUTH_SECRET is set
 
-```bash
-# Reset database (WARNING: deletes all data)
-docker-compose down -v
-docker-compose up --build
+3. **Email Sending**:
+   - Users must configure individual email settings
+   - Test with Settings → Email Setup
+   - Verify Gmail app passwords are correct
 
-# Check database connection
-docker-compose exec db psql -U autosendr_user -d autosendr -c "SELECT 1;"
-```
+### Performance Optimization
 
-### Email Sending Issues
+1. **Database Optimization**:
 
-1. **Check Gmail Settings**:
+   - Neon auto-scales compute
+   - Connection pooling enabled by default
+   - Monitor query performance
 
-   - Verify 2FA is enabled
-   - Confirm app password is correct
-   - Test in Single Email Sender first
+2. **Vercel Optimization**:
+   - Functions auto-scale
+   - Edge caching for static assets
+   - Monitor function execution time
 
-2. **Check SMTP Configuration**:
-   - Go to Attachments & Templates → SMTP Configuration
-   - Test connection
+## Scaling Considerations
 
-### AI Features Not Working
+### User Growth
 
-1. **Check Groq API Key**:
+- **Database**: Neon scales automatically
+- **Compute**: Vercel functions scale on demand
+- **Storage**: Monitor file upload usage
+- **Email**: Rate limiting per user
 
-   - Verify key is correct in `.env`
-   - Check Groq Console for usage limits
+### Cost Management
 
-2. **Check AI Rules**:
-   - Go to Attachments & Templates → AI Enhancement Rules
-   - Ensure rules are active
+1. **Neon Costs**:
 
-## Production Deployment
+   - Pay for compute time used
+   - Storage costs scale with data
+   - Connection pooling reduces costs
 
-### Security Considerations
+2. **Vercel Costs**:
+   - Function execution time
+   - Bandwidth usage
+   - Build minutes
+
+## Security Best Practices
 
 1. **Environment Variables**:
 
-   - Use strong database passwords
-   - Keep API keys secure
-   - Don't commit `.env` to version control
+   - Use Vercel's secure environment management
+   - Rotate secrets regularly
+   - Separate dev/prod configurations
 
-2. **Network Security**:
+2. **Database Security**:
 
-   - Use HTTPS in production
-   - Configure firewall rules
-   - Limit database access
+   - Neon provides SSL by default
+   - Connection string includes SSL mode
+   - No direct database access needed
 
-3. **Data Backup**:
-   - Schedule regular database backups
-   - Backup uploaded files
-   - Test restore procedures
+3. **User Data**:
+   - Complete data isolation between users
+   - Secure credential storage
+   - No shared resources
 
-### Docker Production Setup
+## Support & Updates
 
-```bash
-# Production environment
-export NODE_ENV=production
+### Getting Help
 
-# Use production database
-export DATABASE_URL=postgresql://user:password@prod-db:5432/autosendr
+- Check Vercel deployment logs
+- Monitor Neon database performance
+- Review application health endpoint
+- Check GitHub issues for known problems
 
-# Start in production mode
-docker-compose up --build -d
-```
-
-## Updating AutoSendr
+### Updating the Application
 
 ```bash
-# Stop the application
-docker-compose down
-
 # Pull latest changes
 git pull origin main
 
-# Rebuild and restart
-docker-compose up --build -d
+# Deploy updates
+git push origin main
+# Vercel auto-deploys on push
 ```
 
-## Uninstalling
+### Rollback Strategy
 
-```bash
-# Stop and remove containers
-docker-compose down
-
-# Remove all data (WARNING: permanent)
-docker-compose down -v
-
-# Remove Docker images
-docker rmi autosendr-app postgres:15
-```
-
-## Support
-
-- **Issues**: Create an issue on GitHub
-- **Documentation**: Check the main README.md
-- **Email Problems**: Verify Gmail app password setup
-- **AI Issues**: Check Groq API documentation
-
----
-
-**Need Help?** Create an issue on GitHub with:
-
-- Your operating system
-- Docker version
-- Error messages
-- Steps you've tried
+- Vercel provides instant rollback to previous deployments
+- Database migrations are forward-compatible
+- User data remains intact during updates

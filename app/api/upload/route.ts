@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { query } from "@/lib/db";
+import { getServerSession } from "next-auth/next";
 
 // Initialize Groq client function that uses key manager
 async function createGroqClient() {
@@ -231,6 +232,23 @@ function basicMapping(rawContact: any): any {
 
 // POST - Process uploaded files and extract contact data
 export async function POST(request: NextRequest) {
+  // Check authentication
+  const session = await getServerSession();
+
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Get user ID
+  const userResult = await query("SELECT id FROM users WHERE email = $1", [
+    session.user.email,
+  ]);
+
+  if (userResult.rows.length === 0) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  const userId = userResult.rows[0].id;
   const startTime = Date.now();
   const sessionId = `upload_${Date.now()}_${Math.random()
     .toString(36)
@@ -395,22 +413,41 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Save to database
     console.log(`💾 Saving to database...`);
-    const saveResponse = await fetch(`${request.nextUrl.origin}/api/contacts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts: enrichedContacts }),
-    });
+    const insertedContacts = [];
 
-    if (!saveResponse.ok) {
-      updateSessionProgress(sessionId, {
-        status: "failed",
-        message: "Database save failed",
-        error: "Failed to save contacts to database",
-      });
-      throw new Error("Failed to save contacts to database");
+    for (const contact of enrichedContacts) {
+      try {
+        const result = await query(
+          `INSERT INTO contacts (user_id, email, name, company_name, role, recruiter_name, additional_info) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7) 
+           ON CONFLICT (user_id, email) DO UPDATE SET
+           name = COALESCE(EXCLUDED.name, contacts.name),
+           company_name = COALESCE(EXCLUDED.company_name, contacts.company_name),
+           role = COALESCE(EXCLUDED.role, contacts.role),
+           recruiter_name = COALESCE(EXCLUDED.recruiter_name, contacts.recruiter_name),
+           additional_info = COALESCE(EXCLUDED.additional_info, contacts.additional_info),
+           updated_at = CURRENT_TIMESTAMP
+           RETURNING *`,
+          [
+            userId,
+            contact.email,
+            contact.name || null,
+            contact.company_name || null,
+            contact.role || null,
+            contact.recruiter_name || null,
+            contact.additional_info || {},
+          ]
+        );
+        insertedContacts.push(result.rows[0]);
+      } catch (error) {
+        console.error("Error inserting contact:", contact.email, error);
+      }
     }
 
-    const saveResult = await saveResponse.json();
+    const saveResult = {
+      message: `Successfully processed ${insertedContacts.length} contacts`,
+      contacts: insertedContacts,
+    };
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
     console.log(`🎉 Upload completed successfully in ${totalTime}s`);

@@ -11,25 +11,18 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles, Eye, Zap } from "lucide-react";
 
 export function EmailPreview() {
-  const templatePreview = {
-    subject: "Application for [Role] Opportunity at [CompanyName] – Raakesh",
+  const sampleEmail = {
+    subject: "Application for [Role] at [CompanyName]",
     body: `Hi [RecruiterName],
 
-I'm Raakesh, a frontend developer with around 3 years of experience building clean, responsive, and full-stack web apps. I came across your company and would love to apply for a role on your team.
+I hope you're doing well. I recently came across [CompanyName] and found the opportunity for a [Role] very interesting.
 
-Design, develop, deliver — that's my cycle. I focus on clean UI, performance, and building real-world products with modern tools.
+I'm reaching out to express my interest in the [Role] position. With experience in relevant domain/skills, I believe I can contribute meaningfully to your team.
 
-Here are a couple of recent projects:
-• Prodpix – My first complete full-stack application from design to deployment, an AI product imagery platform that's generated 1,000+ images: https://prodpix.com
-• AIChat – Polished chatbot interface with intuitive UI/UX powered by LLaMA models: https://cyberpunkchat.vercel.app/
+I've attached my resume for your reference and would love to connect if the opportunity is still open in [CompanyName].
 
-Portfolio & resume: https://raakesh.space
-GitHub: https://github.com/raakesh-m
-
-Happy to connect if this aligns with what you're looking for in [CompanyName].
-
-Looking forward to your thoughts,
-Raakesh`,
+Thank you for your time,
+Your Name`,
   };
 
   return (
@@ -58,15 +51,13 @@ Raakesh`,
 
             <div className="border-b pb-3">
               <div className="text-sm text-muted-foreground mb-1">Subject:</div>
-              <div className="font-medium text-sm">
-                {templatePreview.subject}
-              </div>
+              <div className="font-medium text-sm">{sampleEmail.subject}</div>
             </div>
 
             <div>
               <div className="text-sm text-muted-foreground mb-2">Body:</div>
               <div className="whitespace-pre-wrap text-sm leading-relaxed max-h-60 overflow-y-auto">
-                {templatePreview.body}
+                {sampleEmail.body}
               </div>
             </div>
           </div>

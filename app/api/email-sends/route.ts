@@ -1,10 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getServerSession } from "next-auth/next";
 
-// GET - Fetch all email sends/logs
+// GET - Fetch all email sends/logs for authenticated user
 export async function GET() {
   try {
-    const result = await query(`
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
+
+    const result = await query(
+      `
       SELECT 
         es.id,
         es.subject,
@@ -16,8 +35,11 @@ export async function GET() {
         c.company_name
       FROM email_sends es
       LEFT JOIN contacts c ON es.contact_id = c.id
-      ORDER BY es.created_at DESC
-    `);
+      WHERE es.user_id = $1
+      ORDER BY es.sent_at DESC
+    `,
+      [userId]
+    );
 
     return NextResponse.json({
       emailSends: result.rows.map((row) => ({
@@ -34,9 +56,26 @@ export async function GET() {
   }
 }
 
-// DELETE - Delete an email send record
+// DELETE - Delete an email send record for authenticated user
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
@@ -47,7 +86,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await query("DELETE FROM email_sends WHERE id = $1", [id]);
+    // Only delete if it belongs to the authenticated user
+    await query("DELETE FROM email_sends WHERE id = $1 AND user_id = $2", [
+      id,
+      userId,
+    ]);
     return NextResponse.json({
       message: "Email send record deleted successfully",
     });

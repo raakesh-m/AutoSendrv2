@@ -1,11 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, Contact } from "@/lib/db";
+import { getServerSession } from "next-auth/next";
 
-// GET - Fetch all contacts
-export async function GET() {
+// GET - Fetch contacts for authenticated user
+export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
+
     const result = await query(
-      "SELECT * FROM contacts ORDER BY created_at DESC"
+      "SELECT * FROM contacts WHERE user_id = $1 ORDER BY created_at DESC",
+      [userId]
     );
     return NextResponse.json({ contacts: result.rows });
   } catch (error) {
@@ -17,9 +36,25 @@ export async function GET() {
   }
 }
 
-// POST - Create contacts from uploaded data
+// POST - Create contacts from uploaded data for authenticated user
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
     const { contacts } = await request.json();
 
     if (!Array.isArray(contacts)) {
@@ -34,9 +69,9 @@ export async function POST(request: NextRequest) {
     for (const contact of contacts) {
       try {
         const result = await query(
-          `INSERT INTO contacts (email, name, company_name, role, recruiter_name, additional_info) 
-           VALUES ($1, $2, $3, $4, $5, $6) 
-           ON CONFLICT (email) DO UPDATE SET
+          `INSERT INTO contacts (user_id, email, name, company_name, role, recruiter_name, additional_info) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7) 
+           ON CONFLICT (user_id, email) DO UPDATE SET
            name = COALESCE(EXCLUDED.name, contacts.name),
            company_name = COALESCE(EXCLUDED.company_name, contacts.company_name),
            role = COALESCE(EXCLUDED.role, contacts.role),
@@ -45,6 +80,7 @@ export async function POST(request: NextRequest) {
            updated_at = CURRENT_TIMESTAMP
            RETURNING *`,
           [
+            userId,
             contact.email,
             contact.name || null,
             contact.company_name || contact.companyName || null,
@@ -72,9 +108,25 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE - Delete a contact
+// DELETE - Delete a contact for authenticated user
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
@@ -87,24 +139,27 @@ export async function DELETE(request: NextRequest) {
 
     // Check if contact has email sends
     const emailSendsCheck = await query(
-      "SELECT COUNT(*) as count FROM email_sends WHERE contact_id = $1",
-      [id]
+      "SELECT COUNT(*) as count FROM email_sends WHERE contact_id = $1 AND user_id = $2",
+      [id, userId]
     );
 
     const emailSendCount = parseInt(emailSendsCheck.rows[0].count);
 
     if (emailSendCount > 0) {
-      // Option 1: Delete related email sends first (CASCADE delete)
-      await query("DELETE FROM email_sends WHERE contact_id = $1", [id]);
+      // Delete related email sends first (user-scoped)
+      await query(
+        "DELETE FROM email_sends WHERE contact_id = $1 AND user_id = $2",
+        [id, userId]
+      );
       console.log(
         `Deleted ${emailSendCount} email send records for contact ${id}`
       );
     }
 
-    // Now delete the contact
+    // Delete the contact (user-scoped)
     const deleteResult = await query(
-      "DELETE FROM contacts WHERE id = $1 RETURNING *",
-      [id]
+      "DELETE FROM contacts WHERE id = $1 AND user_id = $2 RETURNING *",
+      [id, userId]
     );
 
     if (deleteResult.rowCount === 0) {

@@ -1,14 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getServerSession } from "next-auth/next";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 
-// GET - Fetch all attachments
+// GET - Fetch attachments for authenticated user
 export async function GET() {
   try {
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
+
     const result = await query(
-      "SELECT * FROM attachments WHERE is_active = true ORDER BY created_at DESC"
+      "SELECT * FROM attachments WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC",
+      [userId]
     );
     return NextResponse.json({ attachments: result.rows });
   } catch (error) {
@@ -20,9 +39,25 @@ export async function GET() {
   }
 }
 
-// POST - Upload new attachment
+// POST - Upload new attachment for authenticated user
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const category = (formData.get("category") as string) || "general";
@@ -31,6 +66,21 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+
+    // Check file size limit (5MB)
+    const maxFileSize = 5 * 1024 * 1024; // 5MB in bytes
+    if (file.size > maxFileSize) {
+      return NextResponse.json(
+        {
+          error: "File size too large",
+          message:
+            "File size must be under 5MB. Please compress your file or choose a smaller file.",
+          maxSize: "5MB",
+          fileSize: `${Math.round((file.size / (1024 * 1024)) * 100) / 100}MB`,
+        },
+        { status: 413 }
+      );
     }
 
     // Create uploads directory if it doesn't exist
@@ -53,11 +103,12 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes);
     await writeFile(filePath, buffer);
 
-    // Save file info to database
+    // Save file info to database with user association
     const result = await query(
-      `INSERT INTO attachments (name, original_name, file_path, file_size, mime_type, category, description) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO attachments (user_id, name, original_name, file_path, file_size, mime_type, category, description) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [
+        userId,
         name,
         file.name,
         fileName, // Store relative path
@@ -81,9 +132,25 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE - Delete an attachment
+// DELETE - Delete an attachment for authenticated user
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
@@ -94,8 +161,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Soft delete - just mark as inactive
-    await query("UPDATE attachments SET is_active = false WHERE id = $1", [id]);
+    // Soft delete - just mark as inactive (user-scoped)
+    await query(
+      "UPDATE attachments SET is_active = false WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
     return NextResponse.json({ message: "Attachment deleted successfully" });
   } catch (error) {
     console.error("Error deleting attachment:", error);

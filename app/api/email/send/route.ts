@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import { enhanceEmail } from "@/lib/email-enhancement";
 import { updateProgress } from "./progress/route";
 import { join } from "path";
+import { getServerSession } from "next-auth/next";
 
 // Function to fetch the default email template
 async function getDefaultTemplate() {
@@ -19,25 +20,17 @@ async function getDefaultTemplate() {
       return {
         id: 1,
         name: "Default Application Template",
-        subject:
-          "Application for [Role] Opportunity at [CompanyName] – Raakesh",
+        subject: "Application for [Role] at [CompanyName]",
         body: `Hi [RecruiterName],
 
-I'm Raakesh, a frontend developer with around 3 years of experience building clean, responsive, and full-stack web apps. I came across your company and would love to apply for a role on your team.
+I hope you're doing well. I recently came across [CompanyName] and found the opportunity for a [Role] very interesting.
 
-Design, develop, deliver — that's my cycle. I focus on clean UI, performance, and building real-world products with modern tools.
+I'm reaching out to express my interest in the [Role] position. With experience in relevant domain/skills, I believe I can contribute meaningfully to your team.
 
-Here are a couple of recent projects:
-• Prodpix – My first complete full-stack application from design to deployment, an AI product imagery platform that's generated 1,000+ images: https://prodpix.com
-• AIChat – Polished chatbot interface with intuitive UI/UX powered by LLaMA models: https://cyberpunkchat.vercel.app/
+I've attached my resume for your reference and would love to connect if the opportunity is still open in [CompanyName].
 
-Portfolio & resume: https://raakesh.space
-GitHub: https://github.com/raakesh-m
-
-Happy to connect if this aligns with what you're looking for in [CompanyName].
-
-Looking forward to your thoughts,
-Raakesh`,
+Thank you for your time,
+Your Name`,
         variables: ["Role", "CompanyName", "RecruiterName"],
       };
     }
@@ -49,24 +42,17 @@ Raakesh`,
     return {
       id: 1,
       name: "Default Application Template",
-      subject: "Application for [Role] Opportunity at [CompanyName] – Raakesh",
+      subject: "Application for [Role] at [CompanyName]",
       body: `Hi [RecruiterName],
 
-I'm Raakesh, a frontend developer with around 3 years of experience building clean, responsive, and full-stack web apps. I came across your company and would love to apply for a role on your team.
+I hope you're doing well. I recently came across [CompanyName] and found the opportunity for a [Role] very interesting.
 
-Design, develop, deliver — that's my cycle. I focus on clean UI, performance, and building real-world products with modern tools.
+I'm reaching out to express my interest in the [Role] position. With experience in relevant domain/skills, I believe I can contribute meaningfully to your team.
 
-Here are a couple of recent projects:
-• Prodpix – My first complete full-stack application from design to deployment, an AI product imagery platform that's generated 1,000+ images: https://prodpix.com
-• AIChat – Polished chatbot interface with intuitive UI/UX powered by LLaMA models: https://cyberpunkchat.vercel.app/
+I've attached my resume for your reference and would love to connect if the opportunity is still open in [CompanyName].
 
-Portfolio & resume: https://raakesh.space
-GitHub: https://github.com/raakesh-m
-
-Happy to connect if this aligns with what you're looking for in [CompanyName].
-
-Looking forward to your thoughts,
-Raakesh`,
+Thank you for your time,
+Your Name`,
       variables: ["Role", "CompanyName", "RecruiterName"],
     };
   }
@@ -94,6 +80,24 @@ function estimateTimeRemaining(
 // POST - Send emails to contacts using efficient template approach with real-time progress tracking
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
+
     const {
       contactIds,
       useAiCustomization = false,
@@ -113,32 +117,59 @@ export async function POST(request: NextRequest) {
       sessionId ||
       `campaign_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Check if environment variables are set
-    if (!process.env.GMAIL_EMAIL || !process.env.GMAIL_APP_PASSWORD) {
-      return NextResponse.json(
-        {
-          error:
-            "Email configuration not found. Please set GMAIL_EMAIL and GMAIL_APP_PASSWORD environment variables.",
-        },
-        { status: 500 }
+    // Get user's SMTP configuration from database (try Gmail first, then Other)
+    let smtpConfigResult = await query(
+      "SELECT * FROM smtp_config WHERE user_id = $1 AND provider_type = 'gmail' ORDER BY created_at DESC LIMIT 1",
+      [userId]
+    );
+
+    // If no Gmail config, try Other provider
+    if (smtpConfigResult.rows.length === 0) {
+      smtpConfigResult = await query(
+        "SELECT * FROM smtp_config WHERE user_id = $1 AND provider_type = 'other' ORDER BY created_at DESC LIMIT 1",
+        [userId]
       );
     }
 
-    // Get the default template from database
-    const emailTemplate = await getDefaultTemplate();
+    if (smtpConfigResult.rows.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Email configuration not found. Please configure your email settings in the Email Setup section.",
+        },
+        { status: 400 }
+      );
+    }
 
-    // Get contacts
-    const contactsResult = await query(
-      "SELECT * FROM contacts WHERE id = ANY($1)",
-      [contactIds]
+    const smtpConfig = smtpConfigResult.rows[0];
+
+    // Get the default template from database (user-scoped)
+    const templateResult = await query(
+      "SELECT * FROM email_templates WHERE user_id = $1 AND is_default = true ORDER BY created_at DESC LIMIT 1",
+      [userId]
     );
 
-    // Get attachments if provided
-    let attachments = [];
+    if (templateResult.rows.length === 0) {
+      return NextResponse.json(
+        { error: "No default email template found for this user" },
+        { status: 400 }
+      );
+    }
+
+    const emailTemplate = templateResult.rows[0];
+
+    // Get contacts (user-scoped)
+    const contactsResult = await query(
+      "SELECT * FROM contacts WHERE id = ANY($1) AND user_id = $2",
+      [contactIds, userId]
+    );
+
+    // Get attachments if provided (user-scoped)
+    let attachments: any[] = [];
     if (attachmentIds.length > 0) {
       const attachmentsResult = await query(
-        "SELECT * FROM attachments WHERE id = ANY($1) AND is_active = true",
-        [attachmentIds]
+        "SELECT * FROM attachments WHERE id = ANY($1) AND user_id = $2 AND is_active = true",
+        [attachmentIds, userId]
       );
       attachments = attachmentsResult.rows;
 
@@ -178,6 +209,9 @@ export async function POST(request: NextRequest) {
       logs: [`🚀 Starting bulk email campaign for ${totalContacts} contacts`],
       completed: false,
     });
+
+    // Small delay to ensure SSE connection is established
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     console.log(
       `\n🚀 Starting bulk email campaign for ${totalContacts} contacts`
@@ -372,6 +406,7 @@ export async function POST(request: NextRequest) {
                 position: role,
                 recruiterName,
                 useAi: true,
+                userId: userId,
               });
 
               if (enhancementResult.aiEnhanced) {
@@ -522,7 +557,7 @@ export async function POST(request: NextRequest) {
           }));
 
           const mailOptions = {
-            from: `"Raakesh" <${process.env.GMAIL_EMAIL}>`,
+            from: `"${smtpConfig.email.split("@")[0]}" <${smtpConfig.email}>`,
             to: contact.email,
             subject: personalizedSubject,
             text: personalizedBody,
@@ -532,21 +567,27 @@ export async function POST(request: NextRequest) {
 
           await nodemailer
             .createTransport({
-              host: "smtp.gmail.com",
-              port: 587,
-              secure: false,
+              host: smtpConfig.smtp_host,
+              port: smtpConfig.smtp_port,
+              secure: smtpConfig.smtp_port === 465, // true for 465, false for other ports like 587
               auth: {
-                user: process.env.GMAIL_EMAIL,
-                pass: process.env.GMAIL_APP_PASSWORD,
+                user: smtpConfig.email,
+                pass: smtpConfig.app_password,
+              },
+              // Enable STARTTLS for port 587 (Gmail default)
+              requireTLS: smtpConfig.smtp_port === 587,
+              tls: {
+                // Allow less secure TLS configurations if needed
+                rejectUnauthorized: false,
               },
             })
             .sendMail(mailOptions);
 
           // Log successful send
           const emailSendResult = await query(
-            `INSERT INTO email_sends (contact_id, subject, body, status, sent_at) 
-             VALUES ($1, $2, $3, 'sent', CURRENT_TIMESTAMP) RETURNING id`,
-            [contact.id, personalizedSubject, personalizedBody]
+            `INSERT INTO email_sends (user_id, contact_id, subject, body, status, sent_at) 
+             VALUES ($1, $2, $3, $4, 'sent', CURRENT_TIMESTAMP) RETURNING id`,
+            [userId, contact.id, personalizedSubject, personalizedBody]
           );
 
           // Record attachments if any
@@ -621,9 +662,15 @@ export async function POST(request: NextRequest) {
 
         // Log failed send
         await query(
-          `INSERT INTO email_sends (contact_id, subject, body, status, error_message) 
-           VALUES ($1, $2, $3, 'failed', $4)`,
-          [contact.id, personalizedSubject, personalizedBody, errorMessage]
+          `INSERT INTO email_sends (user_id, contact_id, subject, body, status, error_message) 
+           VALUES ($1, $2, $3, $4, 'failed', $5)`,
+          [
+            userId,
+            contact.id,
+            personalizedSubject,
+            personalizedBody,
+            errorMessage,
+          ]
         );
 
         emailResults.push({

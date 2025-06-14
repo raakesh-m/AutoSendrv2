@@ -4,10 +4,10 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { AttachmentsManager } from "@/components/attachments-manager";
-import { Paperclip } from "lucide-react";
+import { SmtpConfig } from "@/components/smtp-config";
+import { Mail } from "lucide-react";
 
-export default function AttachmentsPage() {
+export default function EmailSetupPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -36,36 +36,34 @@ export default function AttachmentsPage() {
       <div className="space-y-8">
         <div>
           <div className="flex items-center space-x-3 mb-2">
-            <Paperclip className="h-8 w-8 text-amber-600" />
-            <h1 className="text-3xl font-bold tracking-tight">
-              File Attachments
-            </h1>
+            <Mail className="h-8 w-8 text-blue-600" />
+            <h1 className="text-3xl font-bold tracking-tight">Email Setup</h1>
           </div>
           <p className="text-muted-foreground">
-            Upload and manage files to attach to your email campaigns, such as
-            resumes and cover letters.
+            Configure your personal email credentials to send campaigns. Your
+            settings are private and secure.
           </p>
         </div>
 
-        {/* Attachments Info */}
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+        {/* Important Notice */}
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
           <div className="flex items-start space-x-3">
-            <div className="text-amber-600 dark:text-amber-400 text-lg">📎</div>
+            <div className="text-blue-600 dark:text-blue-400 text-lg">🔒</div>
             <div>
-              <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-1">
-                Personal File Library
+              <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                Your Personal Email Configuration
               </h3>
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                Upload your documents like resumes, cover letters, and
-                portfolios. Each user has their own private file storage.
-                Supported formats: PDF, DOC, DOCX, TXT.
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                Each user has their own email credentials. Configure your
+                settings below to send emails with your own account. We
+                recommend using an app-specific password for better security.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Attachments Manager Component */}
-        <AttachmentsManager />
+        {/* Email Configuration Component */}
+        <SmtpConfig />
       </div>
     </DashboardLayout>
   );

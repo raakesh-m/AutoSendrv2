@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Edit, Save, RefreshCw, Brain, AlertCircle, Plus } from "lucide-react";
+import { Edit, Save, RefreshCw, Brain, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface AiRules {
@@ -28,7 +28,6 @@ interface AiRules {
 }
 
 export function AiRulesManager() {
-  const [rules, setRules] = useState<AiRules[]>([]);
   const [activeRule, setActiveRule] = useState<AiRules | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -48,7 +47,6 @@ export function AiRulesManager() {
       if (!response.ok) throw new Error("Failed to fetch AI rules");
 
       const data = await response.json();
-      setRules(data.rules || []);
 
       // Find the active rule
       const active = data.rules?.find((rule: AiRules) => rule.is_active);
@@ -136,55 +134,6 @@ export function AiRulesManager() {
       });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleActivateRule = async (ruleId: number) => {
-    try {
-      // First, deactivate all rules
-      await Promise.all(
-        rules.map(async (rule) => {
-          if (rule.is_active && rule.id !== ruleId) {
-            await fetch(`/api/ai-rules?id=${rule.id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                ...rule,
-                is_active: false,
-              }),
-            });
-          }
-        })
-      );
-
-      // Then activate the selected rule
-      const ruleToActivate = rules.find((rule) => rule.id === ruleId);
-      if (ruleToActivate) {
-        const response = await fetch(`/api/ai-rules?id=${ruleId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...ruleToActivate,
-            is_active: true,
-          }),
-        });
-
-        if (!response.ok) throw new Error("Failed to activate rule");
-
-        toast({
-          title: "Rule Activated",
-          description: `"${ruleToActivate.name}" is now the active AI rule`,
-        });
-
-        fetchRules();
-      }
-    } catch (error) {
-      console.error("Error activating rule:", error);
-      toast({
-        title: "Error",
-        description: "Failed to activate AI rule",
-        variant: "destructive",
-      });
     }
   };
 
@@ -337,62 +286,6 @@ export function AiRulesManager() {
           )}
         </CardContent>
       </Card>
-
-      {/* All Rules List */}
-      {rules.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>All AI Rules</CardTitle>
-            <CardDescription>
-              Manage and switch between different AI rule sets
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {rules.map((rule) => (
-                <div
-                  key={rule.id}
-                  className={`p-3 border rounded-lg ${
-                    rule.is_active
-                      ? "border-primary bg-primary/5"
-                      : "border-border"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-medium">{rule.name}</span>
-                        {rule.is_active && (
-                          <Badge variant="default" className="text-xs">
-                            Active
-                          </Badge>
-                        )}
-                      </div>
-                      {rule.description && (
-                        <p className="text-sm text-muted-foreground">
-                          {rule.description}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        Updated: {rule.updated_at}
-                      </p>
-                    </div>
-                    {!rule.is_active && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleActivateRule(rule.id)}
-                      >
-                        Activate
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Info Card */}
       <Card>

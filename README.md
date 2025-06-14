@@ -1,6 +1,6 @@
 # AutoSendr - Automated Email Outreach Platform
 
-AutoSendr is a full-stack email automation platform designed for job seekers and professionals who want to automate their outreach campaigns while maintaining personalization. Built with Next.js, PostgreSQL, and powered by AI customization through Groq API.
+AutoSendr is a full-stack email automation platform designed for job seekers and professionals who want to automate their outreach campaigns while maintaining personalization. Built with Next.js, Neon PostgreSQL, and powered by AI customization through Groq API.
 
 ## Features
 
@@ -8,109 +8,110 @@ AutoSendr is a full-stack email automation platform designed for job seekers and
 - **🤖 AI-Powered Customization**: Leverage Groq API to enhance email personalization with configurable rules
 - **📊 Contact Management**: Upload and manage contact databases from CSV, JSON, or TXT files
 - **📎 Attachment Management**: Upload and manage resumes, portfolios, and documents for email campaigns
-- **🔐 Secure SMTP Integration**: Use Gmail's app passwords for secure email sending
+- **🔐 Secure Authentication**: Google OAuth for secure user management
+- **👥 Multi-User Support**: Each user has their own isolated data and settings
+- **🔐 Secure SMTP Integration**: User-specific email configurations with secure credential storage
 - **📈 Campaign Analytics**: Track email sends, successes, and failures with real-time progress
 - **🎨 Modern UI**: Clean, responsive interface built with shadcn/ui components
-- **🐳 Docker Support**: Easy deployment with Docker and PostgreSQL
+- **☁️ Cloud-Native**: Deployed on Vercel with Neon PostgreSQL
 - **🧠 AI Rules Management**: Control AI behavior with customizable enhancement rules
 
 ## Tech Stack
 
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes, PostgreSQL, Nodemailer
+- **Backend**: Next.js API Routes, Neon PostgreSQL, Nodemailer
+- **Authentication**: NextAuth.js with Google OAuth
 - **AI Integration**: Groq SDK for email customization
 - **UI Components**: shadcn/ui (Radix UI + Tailwind CSS)
-- **Database**: PostgreSQL with connection pooling
+- **Database**: Neon PostgreSQL (serverless)
+- **Deployment**: Vercel
 - **File Storage**: Local filesystem with database metadata
-- **Deployment**: Docker & Docker Compose
 
 ## Quick Start
 
 ### Prerequisites
 
-- Docker Desktop
+- Node.js 18+ and npm/pnpm
 - Git
-- Gmail account with app password enabled (optional)
+- Gmail account with app password enabled (configured per user)
+- Google OAuth credentials (for authentication)
 - Groq API key (optional, for AI customization)
 
-### One-Command Setup 🚀
+### Local Development Setup
 
-```bash
-# Clone the repository
-git clone <repository-url>
-cd autosendr
+1. **Clone the repository**
 
-# Copy environment variables
-cp .env.example .env
+   ```bash
+   git clone <repository-url>
+   cd autosendr
+   ```
 
-# Edit .env with your configuration (see Configuration section below)
-nano .env
+2. **Install dependencies**
 
-# Start everything with Docker
-./start.sh
-```
+   ```bash
+   npm install
+   # or
+   pnpm install
+   ```
 
-That's it! The script will:
+3. **Configure Environment Variables**
 
-- ✅ Check if Docker is running
-- 🔧 Build the Next.js application
-- 🗄️ Start PostgreSQL database with schema
-- 🌐 Launch the web application
-- 📊 Set up all necessary volumes and networks
+   Copy `.env.example` to `.env` and update with your credentials:
 
-**Alternative Docker Commands:**
+   ```bash
+   cp .env.example .env
+   ```
 
-```bash
-# Start full stack (build + run)
-docker-compose up --build
+   Update the `.env` file with:
 
-# Start in background
-docker-compose up --build -d
+   ```bash
+   # Database (Neon PostgreSQL)
+   DATABASE_URL=your-neon-connection-string
 
-# Stop everything
-docker-compose down
+   # Authentication (NextAuth.js)
+   NEXTAUTH_URL=http://localhost:3000
+   NEXTAUTH_SECRET=your-generated-secret
 
-# Reset database (removes all data)
-docker-compose down -v
-```
+   # Google OAuth
+   GOOGLE_CLIENT_ID=your-google-client-id
+   GOOGLE_CLIENT_SECRET=your-google-client-secret
 
-### Manual Development Setup
+   # AI (Optional)
+   GROQ_API_KEY=your-groq-api-key
+   ```
 
-If you prefer to run the frontend locally for development:
+4. **Run the development server**
 
-```bash
-# Start only the database
-docker-compose up db -d
+   ```bash
+   npm run dev
+   # or
+   pnpm dev
+   ```
 
-# Install dependencies and run frontend
-pnpm install
-pnpm dev
-```
+5. **Access the application**
+   Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## Configuration
+## Configuration Setup
 
-### Environment Variables
+### Google OAuth Setup
 
-Create a `.env` file in the root directory with the following variables:
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Enable Google+ API
+4. Create OAuth 2.0 credentials
+5. Add authorized redirect URIs:
+   - `http://localhost:3000/api/auth/callback/google` (development)
+   - `https://your-domain.vercel.app/api/auth/callback/google` (production)
 
-```bash
-# Database Configuration (automatically configured in Docker)
-DATABASE_URL=postgresql://autosendr_user:autosendr_password@localhost:5432/autosendr
+### Gmail App Password Setup (Per User)
 
-# Gmail Configuration (required for sending emails)
-GMAIL_EMAIL=your-email@gmail.com
-GMAIL_APP_PASSWORD=your-gmail-app-password
-
-# Groq API Configuration (optional, for AI features)
-GROQ_API_KEY=your-groq-api-key-here
-```
-
-### Gmail App Password Setup
+Each user configures their own email credentials in the application:
 
 1. Enable 2-factor authentication on your Google account
 2. Go to Google Account settings → Security → App passwords
 3. Generate a new app password for "Mail"
-4. Use this password in AutoSendr (not your regular Gmail password)
+4. Configure in AutoSendr: Settings → Email Setup
+5. Use the app password (not your regular Gmail password)
 
 ### Groq API Key Setup
 
@@ -118,122 +119,88 @@ GROQ_API_KEY=your-groq-api-key-here
 2. Create a new API key
 3. Add it to your `.env` file
 
-### Access the Application
+## Deployment to Vercel
 
-- **Web Interface**: http://localhost:3000
-- **Database**: localhost:5432 (autosendr_user/autosendr_password)
+1. **Push to GitHub**
+
+   ```bash
+   git add .
+   git commit -m "Initial commit"
+   git push origin main
+   ```
+
+2. **Deploy on Vercel**
+
+   - Connect your GitHub repository on [Vercel](https://vercel.com)
+   - Set environment variables in Vercel dashboard
+   - Deploy automatically
+
+3. **Environment Variables for Production**
+   Set these in your Vercel dashboard:
+   - `DATABASE_URL` - Your Neon connection string
+   - `NEXTAUTH_URL` - Your production URL (https://your-app.vercel.app)
+   - `NEXTAUTH_SECRET` - Generated secret key
+   - `GOOGLE_CLIENT_ID` - Google OAuth client ID
+   - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
+   - `GROQ_API_KEY` - Groq API key (optional)
 
 ## Data Storage
 
+### Multi-User Architecture
+
+AutoSendr supports multiple users with complete data isolation:
+
+1. **User Authentication**: Google OAuth with NextAuth.js
+2. **Data Isolation**: All data is scoped to individual users
+3. **Default Setup**: New users automatically get default templates and AI rules
+
 ### Where Your Data is Stored
 
-1. **Templates**: Stored in PostgreSQL database (`email_templates` table)
-2. **AI Rules**: Stored in PostgreSQL database (`ai_rules` table)
-3. **Contacts**: Stored in PostgreSQL database (`contacts` table)
-4. **Attachments/Resumes**:
-   - Files stored in Docker volume: `autosendr_uploads_data`
-   - Metadata stored in PostgreSQL database (`attachments` table)
-5. **Email History**: Stored in PostgreSQL database (`email_sends` table)
-6. **SMTP Configuration**: Stored in PostgreSQL database (`smtp_config` table)
-
-### Data Persistence
-
-- **Database**: Persisted in Docker volume `autosendr_postgres_data`
-- **Uploaded Files**: Persisted in Docker volume `autosendr_uploads_data`
-- **Configuration**: Environment variables in `.env` file
-
-### Backup Your Data
-
-```bash
-# Backup database
-docker-compose exec db pg_dump -U autosendr_user autosendr > backup.sql
-
-# Backup uploaded files
-docker cp autosendr-app-1:/app/uploads ./uploads-backup
-
-# Restore database
-docker-compose exec -T db psql -U autosendr_user autosendr < backup.sql
-```
+1. **Users**: Stored in Neon PostgreSQL (`users` table)
+2. **Templates**: User-specific templates (`email_templates` table)
+3. **AI Rules**: User-specific AI rules (`ai_rules` table)
+4. **Contacts**: User-specific contacts (`contacts` table)
+5. **Attachments/Resumes**: Files stored locally, metadata in database (`attachments` table)
+6. **Email History**: User-specific email history (`email_sends` table)
+7. **SMTP Configuration**: User-specific SMTP settings (`smtp_config` table)
 
 ## Usage Guide
 
-### 1. Configure Email Settings
+### 1. Sign In
 
-1. Navigate to **Attachments & Templates** → **SMTP Configuration**
+- Visit the application URL
+- Click "Sign in with Google"
+- Authorize the application
+
+### 2. Configure Email Settings
+
+1. Navigate to **Settings** → **Email Setup**
 2. Enter your Gmail address and app password
 3. Test the connection to ensure it works
 
-### 2. Manage AI Enhancement Rules
+### 3. Manage AI Enhancement Rules
 
-1. Go to **Attachments & Templates** → **AI Enhancement Rules**
+1. Go to **Settings** → **AI Rules**
 2. Edit the default rules or create new ones
-3. Control how AI enhances your emails:
-   - What AI can fix (grammar, flow)
-   - What AI cannot do (add content, change links)
+3. Control how AI enhances your emails
 
-### 3. Upload Contact Data
+### 4. Upload Contact Data
 
 1. Go to **Dashboard** → **Upload Contact Data**
-2. Upload files in supported formats:
+2. Upload files in supported formats (CSV, JSON, TXT)
 
-**CSV Format:**
+### 5. Manage Attachments
 
-```csv
-email,name,company_name,role,recruiter_name
-john@company.com,John Doe,TechCorp,Software Engineer,Jane Smith
-```
+1. Go to **Settings** → **Attachments**
+2. Upload files by drag & drop
+3. Organize by categories (Resume, Portfolio, etc.)
 
-**JSON Format:**
-
-```json
-[
-  {
-    "email": "john@company.com",
-    "name": "John Doe",
-    "company_name": "TechCorp",
-    "role": "Software Engineer",
-    "recruiter_name": "Jane Smith"
-  }
-]
-```
-
-### 4. Manage Attachments
-
-1. Go to **Attachments & Templates** page
-2. Upload files by drag & drop or clicking to select
-3. Organize files by categories:
-   - **Resume/CV**: Your resume files
-   - **Portfolio**: Portfolio pieces and work samples
-   - **Cover Letter**: Customized cover letters
-   - **Certificate**: Certifications and credentials
-   - **Document**: General documents
-   - **Image**: Images and visual content
-
-### 5. Send Email Campaigns
-
-**Single Email:**
-
-1. Go to **Single Email Sender**
-2. Fill in company details
-3. Preview and send
-
-**Bulk Campaigns:**
+### 6. Send Email Campaigns
 
 1. Go to **Dashboard** → **Contacts Table**
 2. Select contacts to email
 3. Choose AI enhancement options
 4. Monitor real-time progress
-
-## Email Template System
-
-The default email template includes:
-
-- Subject: `Application for [Role] Opportunity at [CompanyName] – Raakesh`
-- Personalized content with project showcases
-- Automatic variable replacement:
-  - `[Role]` → Contact's role
-  - `[CompanyName]` → Contact's company
-  - `[RecruiterName]` → Contact's recruiter name
 
 ## Development
 
@@ -243,92 +210,31 @@ The default email template includes:
 autosendr/
 ├── app/                    # Next.js app router
 │   ├── api/               # API endpoints
-│   │   ├── ai-rules/      # AI rules management
-│   │   ├── attachments/   # File attachment management
-│   │   ├── contacts/      # Contact management
-│   │   ├── email/         # Email sending & optimization
-│   │   ├── smtp/          # SMTP configuration
-│   │   ├── templates/     # Email template management
-│   │   └── upload/        # File processing
-│   ├── attachments/       # Attachments & templates page
-│   ├── database/          # Database management page
-│   ├── single-email-sender/ # Single email interface
-│   └── email-tester/      # Email testing & preview
+│   ├── auth/              # Authentication pages
+│   └── ...                # Other pages
 ├── components/            # React components
-│   ├── ui/               # shadcn/ui components
-│   ├── ai-rules-manager.tsx # AI rules management
-│   ├── attachments-manager.tsx # File management
-│   ├── contacts-table.tsx # Contact management
-│   ├── email-tester-form.tsx # Single email sender
-│   └── template-manager.tsx # Email template editor
-├── lib/                   # Utility functions
-│   ├── db.ts             # Database connection
-│   ├── email-enhancement.ts # Shared AI enhancement
-│   └── utils.ts          # General utilities
 ├── hooks/                 # Custom React hooks
-├── uploads/              # File upload directory (auto-created)
-├── docker-compose.yml     # Docker services
-├── init.sql              # Database schema
-└── Dockerfile            # Application container
+├── lib/                   # Utility functions
+└── styles/               # CSS styles
 ```
 
-### API Endpoints
+### Scripts
 
-- `GET/POST/PUT/DELETE /api/ai-rules` - AI rules management
-- `GET /api/ai-rules/active` - Get active AI rules
-- `GET/POST/DELETE /api/contacts` - Contact CRUD operations
-- `POST /api/upload` - Process uploaded files
-- `GET/POST/DELETE /api/attachments` - File attachment management
-- `GET/POST/PUT/DELETE /api/templates` - Email template management
-- `POST /api/email/send` - Send bulk email campaigns
-- `POST /api/email/optimize` - AI email enhancement
-- `POST /api/email/test` - Send single test email
-- `GET/POST/PUT /api/smtp` - SMTP configuration
-
-### Database Schema
-
-```sql
--- Core tables
-contacts              # Contact information
-email_templates       # Email templates with variables
-ai_rules             # AI enhancement rules
-attachments          # File metadata
-smtp_config          # Email configuration
-
--- Campaign tracking
-email_campaigns      # Campaign metadata
-email_sends          # Individual email logs
-email_attachments    # Email-attachment relationships
+```bash
+npm run dev      # Start development server
+npm run build    # Build for production
+npm run start    # Start production server
+npm run lint     # Run ESLint
 ```
-
-## Security & Privacy
-
-- **Environment Variables**: Sensitive data stored in `.env` (not committed to Git)
-- **Gmail App Passwords**: Secure authentication without exposing main password
-- **File Validation**: Strict file type and size limits
-- **SQL Injection Protection**: Parameterized queries
-- **Data Isolation**: Docker containers with network isolation
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Support
 
 For issues and questions:
 
-1. Check the GitHub Issues page
-2. Review the documentation
-3. Create a new issue with detailed information
+- Create an issue on GitHub
+- Check the documentation
+- Review environment variable setup
 
----
+## License
 
-**Note**: This is a personal project designed for job search automation. Please use responsibly and in accordance with email best practices and anti-spam regulations.
+[Your License Here]

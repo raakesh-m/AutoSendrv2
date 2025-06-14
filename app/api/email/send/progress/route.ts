@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// In-memory progress store (in production, use Redis or database)
-const progressStore = new Map<string, any>();
+// Use global variables to persist across API route executions
+// This works in development and most deployment environments
+declare global {
+  var progressStore: Map<string, any> | undefined;
+  var completionTracker: Map<string, boolean> | undefined;
+}
+
+// Initialize global stores if they don't exist
+if (!global.progressStore) {
+  global.progressStore = new Map<string, any>();
+}
+if (!global.completionTracker) {
+  global.completionTracker = new Map<string, boolean>();
+}
+
+// Use the global stores
+const progressStore = global.progressStore;
+const completionTracker = global.completionTracker;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -15,28 +31,60 @@ export async function GET(request: NextRequest) {
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
+      let isClosed = false;
+
+      const safeClose = () => {
+        if (!isClosed) {
+          try {
+            controller.close();
+            isClosed = true;
+            // Only log connection close for debugging if needed
+          } catch (error) {
+            // Controller already closed or invalid state - this is expected
+          }
+        }
+      };
 
       // Send initial connection
-      controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "connected" })}\n\n`)
-      );
+      const connectMsg = JSON.stringify({ type: "connected" });
+      controller.enqueue(encoder.encode(`data: ${connectMsg}\n\n`));
+      // Removed verbose connection message log
 
       // Check for updates every 500ms
       const interval = setInterval(() => {
+        if (isClosed) {
+          clearInterval(interval);
+          return;
+        }
+
         const progress = progressStore.get(sessionId);
 
         if (progress) {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(progress)}\n\n`)
-          );
+          try {
+            const progressMsg = JSON.stringify(progress);
+            controller.enqueue(encoder.encode(`data: ${progressMsg}\n\n`));
 
-          // Clean up when completed
-          if (progress.completed) {
-            setTimeout(() => {
-              progressStore.delete(sessionId);
+            // Clean up when completed - send completion message once then stop immediately
+            if (progress.completed && !completionTracker.get(sessionId)) {
+              completionTracker.set(sessionId, true);
+              console.log(
+                `🎉 Campaign completed: ${progress.sent} emails sent successfully`
+              );
+
+              // Stop the interval immediately to prevent duplicate messages
               clearInterval(interval);
-              controller.close();
-            }, 5000);
+
+              // Clean up after a short delay to ensure message is delivered
+              setTimeout(() => {
+                progressStore.delete(sessionId);
+                completionTracker.delete(sessionId);
+                safeClose();
+              }, 500);
+            }
+          } catch (error) {
+            // Stream is closed, clean up silently
+            clearInterval(interval);
+            isClosed = true;
           }
         }
       }, 500);
@@ -44,7 +92,7 @@ export async function GET(request: NextRequest) {
       // Cleanup on client disconnect
       request.signal.addEventListener("abort", () => {
         clearInterval(interval);
-        controller.close();
+        safeClose();
       });
     },
   });

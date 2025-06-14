@@ -99,7 +99,7 @@ export function DatabaseTables() {
         await Promise.all([
           fetch("/api/contacts"),
           fetch("/api/email-sends"),
-          fetch("/api/smtp"),
+          fetch("/api/smtp?all=true"),
           fetch("/api/templates"),
         ]);
 
@@ -114,7 +114,7 @@ export function DatabaseTables() {
       setData({
         contacts: contactsData.contacts || [],
         emailSends: emailSendsData.emailSends || [],
-        smtpConfigs: smtpData.configs || smtpData.smtp_configs || [],
+        smtpConfigs: smtpData.smtp_configs || [],
         templates: templatesData.templates || [],
       });
     } catch (error) {

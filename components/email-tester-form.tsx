@@ -198,7 +198,7 @@ export function EmailTesterForm() {
       <CardContent className="space-y-6">
         {/* Template & Rules Link */}
         <div className="flex justify-end">
-          <Link href="/controls">
+          <Link href="/settings">
             <Button variant="outline" size="sm" className="text-xs">
               <Settings className="h-3 w-3 mr-2" />
               View Controls

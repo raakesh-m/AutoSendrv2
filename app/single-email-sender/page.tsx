@@ -1,5 +1,6 @@
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { EmailTesterForm } from "@/components/email-tester-form";
+import { EmailConfigWarning } from "@/components/email-config-warning";
 
 export default function SingleEmailSenderPage() {
   return (
@@ -14,6 +15,8 @@ export default function SingleEmailSenderPage() {
             using your custom template
           </p>
         </div>
+
+        <EmailConfigWarning />
 
         <div className="w-full">
           <EmailTesterForm />

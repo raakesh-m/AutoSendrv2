@@ -1,41 +1,68 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getServerSession } from "next-auth/next";
 
-// GET - Fetch the default email template (id = 1)
+// GET - Fetch the default email template for authenticated user
 export async function GET() {
   try {
+    const session = await getServerSession();
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
+
     const result = await query(
       `SELECT id, name, subject, body, variables, created_at, updated_at
        FROM email_templates 
-       WHERE id = 1`
+       WHERE user_id = $1 AND is_default = true
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId]
     );
 
     if (result.rows.length === 0) {
-      // If no default template exists, return the hardcoded one
+      // If no default template exists for this user, create one
+      const createResult = await query(
+        `INSERT INTO email_templates (user_id, name, subject, body, variables, is_default) 
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [
+          userId,
+          "Default Application Template",
+          "Application for [Role] at [CompanyName]",
+          `Hi [RecruiterName],
+
+I hope you're doing well. I recently came across [CompanyName] and found the opportunity for a [Role] very interesting.
+
+I'm reaching out to express my interest in the [Role] position. With experience in relevant domain/skills , I believe I can contribute meaningfully to your team.
+
+I've attached my resume for your reference and would love to connect if the opportunity is still open in [CompanyName].
+
+Thank you for your time,  
+Your Name`,
+          ["CompanyName", "RecruiterName", "Role"],
+          true,
+        ]
+      );
+
       return NextResponse.json({
         template: {
-          id: 1,
-          name: "Default Application Template",
-          subject:
-            "Application for [Role] Opportunity at [CompanyName] – Raakesh",
-          body: `Hi [RecruiterName],
-
-I'm Raakesh, a frontend developer with around 3 years of experience building clean, responsive, and full-stack web apps. I came across your company and would love to apply for a role on your team.
-
-Design, develop, deliver — that's my cycle. I focus on clean UI, performance, and building real-world products with modern tools.
-
-Here are a couple of recent projects:
-• Prodpix – My first complete full-stack application from design to deployment, an AI product imagery platform that's generated 1,000+ images: https://prodpix.com
-• AIChat – Polished chatbot interface with intuitive UI/UX powered by LLaMA models: https://cyberpunkchat.vercel.app/
-
-Portfolio & resume: https://raakesh.space
-GitHub: https://github.com/raakesh-m
-
-Happy to connect if this aligns with what you're looking for in [CompanyName].
-
-Looking forward to your thoughts,
-Raakesh`,
-          variables: ["Role", "CompanyName", "RecruiterName"],
+          ...createResult.rows[0],
+          created_at: new Date(
+            createResult.rows[0].created_at
+          ).toLocaleString(),
+          updated_at: new Date(
+            createResult.rows[0].updated_at
+          ).toLocaleString(),
         },
       });
     }

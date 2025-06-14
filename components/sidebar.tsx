@@ -3,15 +3,42 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import { Dialog, Transition } from "@headlessui/react";
-import { X, Database, TestTube, LayoutDashboard, Settings } from "lucide-react";
+import {
+  X,
+  Database,
+  TestTube,
+  LayoutDashboard,
+  Settings,
+  LogOut,
+  User,
+  Mail,
+  FileText,
+  Brain,
+  Paperclip,
+  Key,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AutoSendrLogo } from "@/components/autosendr-logo";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Single Email Sender", href: "/single-email-sender", icon: TestTube },
-  { name: "Controls", href: "/controls", icon: Settings },
+  {
+    name: "Settings",
+    href: "/settings",
+    icon: Settings,
+    submenu: [
+      { name: "Email Setup", href: "/email-setup", icon: Mail },
+      { name: "Templates", href: "/templates", icon: FileText },
+      { name: "AI Rules", href: "/ai-rules", icon: Brain },
+      { name: "Attachments", href: "/attachments", icon: Paperclip },
+      { name: "API Keys", href: "/api-keys", icon: Key },
+    ],
+  },
   { name: "Database", href: "/database", icon: Database },
 ];
 
@@ -22,6 +49,152 @@ interface SidebarProps {
 
 export function Sidebar({ open, setOpen }: SidebarProps) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const UserSection = () => (
+    <div className="mt-auto border-t border-border/50 pt-4">
+      {session?.user && (
+        <div className="flex items-center gap-x-3 px-2 py-3">
+          <Avatar className="h-8 w-8">
+            <AvatarImage
+              src={session.user.image || ""}
+              alt={session.user.name || ""}
+            />
+            <AvatarFallback>
+              <User className="h-4 w-4" />
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">
+              {session.user.name || "User"}
+            </p>
+            <p className="text-xs text-muted-foreground truncate">
+              {session.user.email}
+            </p>
+          </div>
+        </div>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start text-muted-foreground hover:text-foreground"
+        onClick={() => signOut({ callbackUrl: "/auth/signin" })}
+      >
+        <LogOut className="h-4 w-4 mr-2" />
+        Sign Out
+      </Button>
+    </div>
+  );
+
+  // Helper function to check if a submenu item is active
+  const isSubmenuActive = (submenu: any[]) => {
+    return submenu.some((item) => pathname === item.href);
+  };
+
+  const NavigationItems = ({ mobile = false }) => (
+    <>
+      {navigation.map((item) => {
+        if (item.submenu) {
+          // Settings section with submenu
+          const isActive =
+            pathname === item.href || isSubmenuActive(item.submenu);
+          return (
+            <li key={item.name}>
+              <div className="space-y-1">
+                {/* Settings Header - Now clickable */}
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "group flex gap-x-3 items-center rounded-lg p-3 text-sm leading-6 font-medium",
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  )}
+                  onClick={mobile ? () => setOpen(false) : undefined}
+                >
+                  <item.icon
+                    className={cn(
+                      "h-5 w-5 shrink-0 transition-all duration-200",
+                      isActive
+                        ? "text-primary-foreground"
+                        : "text-muted-foreground group-hover:text-foreground"
+                    )}
+                    aria-hidden="true"
+                  />
+                  {item.name}
+                  {pathname === item.href && (
+                    <div className="ml-auto h-2 w-2 bg-primary-foreground rounded-full"></div>
+                  )}
+                </Link>
+
+                {/* Submenu items */}
+                <ul className="ml-6 space-y-1">
+                  {item.submenu.map((subItem) => (
+                    <li key={subItem.name}>
+                      <Link
+                        href={subItem.href}
+                        className={cn(
+                          pathname === subItem.href
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                          "group flex gap-x-3 items-center rounded-lg p-2 pl-3 text-sm leading-6 font-medium"
+                        )}
+                        onClick={mobile ? () => setOpen(false) : undefined}
+                      >
+                        <subItem.icon
+                          className={cn(
+                            "h-4 w-4 shrink-0 transition-all duration-200",
+                            pathname === subItem.href
+                              ? "text-primary-foreground"
+                              : "text-muted-foreground group-hover:text-foreground"
+                          )}
+                          aria-hidden="true"
+                        />
+                        {subItem.name}
+                        {pathname === subItem.href && (
+                          <div className="ml-auto h-2 w-2 bg-primary-foreground rounded-full"></div>
+                        )}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </li>
+          );
+        } else {
+          // Regular navigation item
+          return (
+            <li key={item.name}>
+              <Link
+                href={item.href}
+                className={cn(
+                  pathname === item.href
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                  "group flex gap-x-3 items-center rounded-lg p-3 text-sm leading-6 font-medium"
+                )}
+                onClick={mobile ? () => setOpen(false) : undefined}
+              >
+                <item.icon
+                  className={cn(
+                    "h-5 w-5 shrink-0 transition-all duration-200",
+                    pathname === item.href
+                      ? "text-primary-foreground"
+                      : "text-muted-foreground group-hover:text-foreground"
+                  )}
+                  aria-hidden="true"
+                />
+                {item.name}
+                {pathname === item.href && (
+                  <div className="ml-auto h-2 w-2 bg-primary-foreground rounded-full"></div>
+                )}
+              </Link>
+            </li>
+          );
+        }
+      })}
+    </>
+  );
 
   return (
     <>
@@ -70,37 +243,11 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
                     <ul role="list" className="flex flex-1 flex-col gap-y-7">
                       <li>
                         <ul role="list" className="-mx-2 space-y-2">
-                          {navigation.map((item) => (
-                            <li key={item.name}>
-                              <Link
-                                href={item.href}
-                                className={cn(
-                                  pathname === item.href
-                                    ? "bg-primary text-primary-foreground shadow-sm"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                                  "group flex gap-x-3 rounded-lg p-3 text-sm leading-6 font-medium transition-all duration-200"
-                                )}
-                                onClick={() => setOpen(false)}
-                              >
-                                <item.icon
-                                  className={cn(
-                                    "h-5 w-5 shrink-0 transition-all duration-200",
-                                    pathname === item.href
-                                      ? "text-primary-foreground"
-                                      : "text-muted-foreground group-hover:text-foreground"
-                                  )}
-                                  aria-hidden="true"
-                                />
-                                {item.name}
-                                {pathname === item.href && (
-                                  <div className="ml-auto h-2 w-2 bg-primary-foreground rounded-full"></div>
-                                )}
-                              </Link>
-                            </li>
-                          ))}
+                          <NavigationItems mobile={true} />
                         </ul>
                       </li>
                     </ul>
+                    <UserSection />
                   </nav>
                 </div>
               </Dialog.Panel>
@@ -119,36 +266,11 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
             <ul role="list" className="flex flex-1 flex-col gap-y-7">
               <li>
                 <ul role="list" className="-mx-2 space-y-2">
-                  {navigation.map((item) => (
-                    <li key={item.name}>
-                      <Link
-                        href={item.href}
-                        className={cn(
-                          pathname === item.href
-                            ? "bg-primary text-primary-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                          "group flex gap-x-3 rounded-lg p-3 text-sm leading-6 font-medium transition-all duration-200"
-                        )}
-                      >
-                        <item.icon
-                          className={cn(
-                            "h-5 w-5 shrink-0 transition-all duration-200",
-                            pathname === item.href
-                              ? "text-primary-foreground"
-                              : "text-muted-foreground group-hover:text-foreground"
-                          )}
-                          aria-hidden="true"
-                        />
-                        {item.name}
-                        {pathname === item.href && (
-                          <div className="ml-auto h-2 w-2 bg-primary-foreground rounded-full"></div>
-                        )}
-                      </Link>
-                    </li>
-                  ))}
+                  <NavigationItems />
                 </ul>
               </li>
             </ul>
+            <UserSection />
           </nav>
         </div>
       </div>

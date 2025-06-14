@@ -9,6 +9,7 @@ interface EnhancementOptions {
   position?: string;
   recruiterName?: string;
   useAi?: boolean;
+  userId?: string;
 }
 
 interface EnhancementResult {
@@ -19,63 +20,64 @@ interface EnhancementResult {
   error?: string;
 }
 
-// Get active AI rules from database
-async function getActiveAiRules(): Promise<string> {
+// Get active AI rules from database for a specific user
+async function getActiveAiRules(userId: string): Promise<string> {
   try {
-    const result = await query(`
+    const result = await query(
+      `
       SELECT rules_text 
       FROM ai_rules 
-      WHERE is_active = true 
+      WHERE user_id = $1 AND is_active = true 
       ORDER BY created_at DESC 
       LIMIT 1
-    `);
+    `,
+      [userId]
+    );
 
     if (result.rows.length === 0) {
-      // Return default rules if none found
-      return `You are an email enhancement assistant. Your job is to improve job application emails while following these strict rules:
+      // Return the same default rules as the API endpoints
+      return `You are a template placeholder replacement assistant. Follow these rules EXACTLY:
 
-RULES:
-1. NEVER add new content, projects, or information not already present
-2. ONLY fix grammar, spelling, and awkward phrasing from placeholder replacements
-3. Keep the same tone, style, and personality
-4. Maintain all existing links, projects, and specific details exactly as they are
-5. Do not make the email longer - keep it concise
-6. Do not change the core message or structure
-7. Only improve readability and flow
+Do not alter the structure or layout of the template in any way.
+Only replace the placeholders: [CompanyName], [RecruiterName], and [Role].
+Do not add new content such as achievements, skills, compliments, or projects.
+Do not remove any line, word, or punctuation from the original template.
+If [RecruiterName] is missing or empty, replace the greeting line with:
+       → "Hi [CompanyName] team,"
+If [CompanyName] is also missing, replace greeting line with:
+       → "Hi there,"
+If [Role] is missing or empty, use the generic phrase:
+       → "this position"
+Preserve all original line breaks, spacing, and punctuation exactly as provided.
+Maintain capitalization consistency between inserted values and surrounding text.
+Do not change or add to the sender signature or closing lines.
+Do not include any extra text, comments, or instructions in the final output.
 
-WHAT TO FIX:
-- Grammar errors from placeholder replacements
-- Awkward transitions between sentences
-- Minor spelling mistakes
-- Improve sentence flow without changing meaning
-
-WHAT NOT TO DO:
-- Add new sentences or paragraphs
-- Change project descriptions
-- Add new qualifications or skills
-- Modify links or contact information
-- Change the greeting or closing
-- Add buzzwords or corporate speak
-
-Keep the email authentic and personal. Only make minimal improvements.`;
+CRITICAL: Your job is ONLY to replace placeholders. Do not enhance, improve, or modify anything else.`;
     }
 
     return result.rows[0].rules_text;
   } catch (error) {
     console.error("Error fetching AI rules:", error);
-    // Return default rules on error
-    return `You are an email enhancement assistant. Your job is to improve job application emails while following these strict rules:
+    // Return the same default rules as the API endpoints on error
+    return `You are a template placeholder replacement assistant. Follow these rules EXACTLY:
 
-RULES:
-1. NEVER add new content, projects, or information not already present
-2. ONLY fix grammar, spelling, and awkward phrasing from placeholder replacements
-3. Keep the same tone, style, and personality
-4. Maintain all existing links, projects, and specific details exactly as they are
-5. Do not make the email longer - keep it concise
-6. Do not change the core message or structure
-7. Only improve readability and flow
+Do not alter the structure or layout of the template in any way.
+Only replace the placeholders: [CompanyName], [RecruiterName], and [Role].
+Do not add new content such as achievements, skills, compliments, or projects.
+Do not remove any line, word, or punctuation from the original template.
+If [RecruiterName] is missing or empty, replace the greeting line with:
+       → "Hi [CompanyName] team,"
+If [CompanyName] is also missing, replace greeting line with:
+       → "Hi there,"
+If [Role] is missing or empty, use the generic phrase:
+       → "this position"
+Preserve all original line breaks, spacing, and punctuation exactly as provided.
+Maintain capitalization consistency between inserted values and surrounding text.
+Do not change or add to the sender signature or closing lines.
+Do not include any extra text, comments, or instructions in the final output.
 
-Keep the email authentic and personal. Only make minimal improvements.`;
+CRITICAL: Your job is ONLY to replace placeholders. Do not enhance, improve, or modify anything else.`;
   }
 }
 
@@ -90,6 +92,7 @@ export async function enhanceEmail(
     position,
     recruiterName,
     useAi = false,
+    userId,
   } = options;
 
   // If AI is disabled, return original content
@@ -99,6 +102,17 @@ export async function enhanceEmail(
       body,
       aiEnhanced: false,
       message: "AI enhancement disabled",
+    };
+  }
+
+  // Require userId for AI enhancement
+  if (!userId) {
+    return {
+      subject,
+      body,
+      aiEnhanced: false,
+      error: "User ID required for AI enhancement",
+      message: "Cannot fetch user-specific AI rules without user ID",
     };
   }
 
@@ -126,8 +140,8 @@ export async function enhanceEmail(
       }`
     );
 
-    // Get active AI rules
-    const aiRules = await getActiveAiRules();
+    // Get active AI rules for this specific user
+    const aiRules = await getActiveAiRules(userId);
 
     // Create the enhancement prompt
     const prompt = `${aiRules}

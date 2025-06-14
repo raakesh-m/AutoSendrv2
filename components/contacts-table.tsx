@@ -187,7 +187,8 @@ export function ContactsTable() {
           eventSource.close();
           console.log(`EventSource closed successfully (${context})`);
         } catch (error) {
-          console.log(`Error closing EventSource (${context}):`, error);
+          // This is expected behavior - EventSource might already be closed
+          console.log(`EventSource close handled (${context})`);
         }
       } else {
         console.log(`EventSource already closed (${context})`);
@@ -240,7 +241,6 @@ export function ContactsTable() {
         const data = JSON.parse(event.data);
 
         if (data.type === "connected") {
-          console.log("Connected to progress stream");
           sseWorking = true;
           // Clear any fallback polling since SSE is working
           if (fallbackPolling) {
@@ -263,7 +263,9 @@ export function ContactsTable() {
             aiEnhanced: data.aiEnhanced,
           });
 
-          if (data.completed) {
+          // Only trigger completion logic once - prevent multiple toasts
+          if (data.completed && !campaignCompleted) {
+            console.log("🎉 Campaign completion detected - showing toast!");
             setCampaignCompleted(true);
             setSelectedContacts([]);
 
@@ -299,23 +301,19 @@ export function ContactsTable() {
           }
         }
       } catch (error) {
-        console.error("Error parsing SSE data:", error);
+        console.error("❌ Error parsing SSE data:", error);
       }
     };
 
     newEventSource.onerror = (error) => {
-      console.error("SSE connection error:", error);
-      console.log("EventSource readyState:", newEventSource.readyState);
-      console.log("EventSource URL:", newEventSource.url);
+      // SSE connection issues are expected during reconnection attempts
 
       // Don't immediately close and abandon - SSE will auto-reconnect
       // Only close if we explicitly want to stop the connection
       if (newEventSource.readyState === EventSource.CLOSED) {
-        console.log("SSE connection closed permanently, starting fallback");
         setEventSource(null);
         // Force start fallback polling immediately
         if (!fallbackPolling) {
-          console.log("Starting immediate fallback polling due to SSE failure");
           setBulkSendingState((prev) => ({
             ...prev,
             currentEmail: "Using fallback updates (SSE failed)...",
@@ -344,26 +342,19 @@ export function ContactsTable() {
                     aiEnhanced: data.aiEnhanced,
                   });
 
-                  if (data.completed) {
+                  if (data.completed && !campaignCompleted) {
                     setCampaignCompleted(true);
                     setSelectedContacts([]);
                     clearInterval(fallbackPolling!);
                     fallbackPolling = null;
 
+                    toast({
+                      title: "📧 Bulk Campaign Completed!",
+                      description: `${data.sent} emails sent, ${data.failed} failed, ${data.aiEnhanced} AI-enhanced.`,
+                    });
+
                     // Safely close EventSource when campaign completes via fallback
-                    if (
-                      newEventSource &&
-                      newEventSource.readyState !== EventSource.CLOSED
-                    ) {
-                      try {
-                        newEventSource.close();
-                      } catch (error) {
-                        console.log(
-                          "Error closing EventSource after fallback completion:",
-                          error
-                        );
-                      }
-                    }
+                    safeCloseEventSource(newEventSource, "fallback completion");
                   }
                 }
               }
@@ -373,25 +364,13 @@ export function ContactsTable() {
           }, 1000);
         }
       } else {
-        console.log("SSE connection error, will retry automatically...");
-        console.log(
-          "Current readyState:",
-          newEventSource.readyState === EventSource.CONNECTING
-            ? "CONNECTING"
-            : newEventSource.readyState === EventSource.OPEN
-            ? "OPEN"
-            : "CLOSED"
-        );
+        // SSE is auto-reconnecting, this is normal behavior
       }
     };
 
     // Start fallback polling after a shorter delay if SSE doesn't connect
     setTimeout(() => {
       if (!sseWorking && !fallbackPolling) {
-        console.log(
-          "SSE not working after 2 seconds, starting fallback polling..."
-        );
-
         // Update UI to show we're using fallback
         setBulkSendingState((prev) => ({
           ...prev,
@@ -421,26 +400,19 @@ export function ContactsTable() {
                   aiEnhanced: data.aiEnhanced,
                 });
 
-                if (data.completed) {
+                if (data.completed && !campaignCompleted) {
                   setCampaignCompleted(true);
                   setSelectedContacts([]);
                   clearInterval(fallbackPolling!);
                   fallbackPolling = null;
 
+                  toast({
+                    title: "📧 Bulk Campaign Completed!",
+                    description: `${data.sent} emails sent, ${data.failed} failed, ${data.aiEnhanced} AI-enhanced.`,
+                  });
+
                   // Safely close EventSource when campaign completes
-                  if (
-                    newEventSource &&
-                    newEventSource.readyState !== EventSource.CLOSED
-                  ) {
-                    try {
-                      newEventSource.close();
-                    } catch (error) {
-                      console.log(
-                        "Error closing EventSource after immediate fallback completion:",
-                        error
-                      );
-                    }
-                  }
+                  safeCloseEventSource(newEventSource, "fallback completion");
                 }
               }
             }

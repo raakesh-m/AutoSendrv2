@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enhanceEmail } from "@/lib/email-enhancement";
+import { query } from "@/lib/db";
+import { getServerSession } from "next-auth/next";
 
 // POST - Optimize email content using shared enhancement function
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication
+    const session = await getServerSession();
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Get user ID
+    const userResult = await query("SELECT id FROM users WHERE email = $1", [
+      session.user.email,
+    ]);
+
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = userResult.rows[0].id;
+
     const { subject, body, companyName, position, recruiterName, minimal } =
       await request.json();
 
@@ -22,6 +41,7 @@ export async function POST(request: NextRequest) {
       position,
       recruiterName,
       useAi: true, // Always try AI for single emails
+      userId: userId,
     });
 
     if (result.error) {

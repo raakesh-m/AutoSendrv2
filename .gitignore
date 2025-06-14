@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/.cursor
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -39,13 +40,6 @@ next-env.d.ts
 
 # uploads directory (user files)
 /uploads
-
-# Docker volumes and data
-docker-compose.override.yml
-
-# Database dumps and backups
-*.sql.backup
-*.dump
 
 # IDE and editor files
 .vscode/

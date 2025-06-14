@@ -269,7 +269,7 @@ export function AttachmentsManager() {
         <CardHeader>
           <CardTitle>Upload New Attachment</CardTitle>
           <CardDescription>
-            Upload files to use in your email campaigns
+            Upload files to use in your email campaigns (Max size: 5MB)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -290,8 +290,11 @@ export function AttachmentsManager() {
                 <p className="text-lg mb-2">
                   Drag & drop a file here, or click to select
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mb-1">
                   Supports PDF, DOC, DOCX, images, TXT, and ZIP files
+                </p>
+                <p className="text-xs text-orange-600 font-medium">
+                  Maximum file size: 5MB
                 </p>
               </div>
             )}
