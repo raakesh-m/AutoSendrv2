@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,8 @@ import {
   FileText,
   Image,
   Archive,
+  HardDrive,
+  AlertCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -58,6 +61,18 @@ interface Attachment {
   category: string;
   description?: string;
   created_at: string;
+  r2_key: string;
+}
+
+interface StorageQuota {
+  usedBytes: number;
+  maxBytes: number;
+  usedMB: number;
+  maxMB: number;
+  remainingBytes: number;
+  remainingMB: number;
+  percentageUsed: number;
+  canUpload: boolean;
 }
 
 const categories = [
@@ -72,6 +87,7 @@ const categories = [
 
 export function AttachmentsManager() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [quota, setQuota] = useState<StorageQuota | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -91,6 +107,7 @@ export function AttachmentsManager() {
 
       const data = await response.json();
       setAttachments(data.attachments || []);
+      setQuota(data.quota || null);
     } catch (error) {
       console.error("Error fetching attachments:", error);
       toast({
@@ -107,17 +124,46 @@ export function AttachmentsManager() {
     fetchAttachments();
   }, []);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
-      setSelectedFile(file);
-      setUploadForm((prev) => ({
-        ...prev,
-        name: file.name,
-      }));
-      setIsDialogOpen(true);
-    }
-  }, []);
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      if (acceptedFiles.length > 0) {
+        const file = acceptedFiles[0];
+
+        // Check file size before allowing upload
+        if (quota && !quota.canUpload) {
+          toast({
+            title: "Storage Full",
+            description:
+              "You have reached your storage limit. Please delete some files first.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const fileSizeMB = file.size / (1024 * 1024);
+        if (quota && fileSizeMB > quota.remainingMB) {
+          toast({
+            title: "File Too Large",
+            description: `File size (${fileSizeMB.toFixed(
+              2
+            )}MB) exceeds remaining storage (${quota.remainingMB.toFixed(
+              2
+            )}MB)`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setSelectedFile(file);
+        setUploadForm((prev) => ({
+          ...prev,
+          name: file.name,
+        }));
+        setIsDialogOpen(true);
+      }
+    },
+    [quota, toast]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -152,7 +198,9 @@ export function AttachmentsManager() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Upload failed");
+        throw new Error(
+          errorData.message || errorData.error || "Upload failed"
+        );
       }
 
       const result = await response.json();
@@ -205,23 +253,34 @@ export function AttachmentsManager() {
 
   const handleDownload = async (id: number, filename: string) => {
     try {
-      const response = await fetch(`/api/attachments/${id}`);
-      if (!response.ok) throw new Error("Failed to download file");
+      const response = await fetch(`/api/attachments/download?id=${id}`);
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Download failed");
+      }
+
+      const data = await response.json();
+
+      // Open the presigned URL in a new tab for download
+      const link = document.createElement("a");
+      link.href = data.downloadUrl;
+      link.download = filename;
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Download started",
+        description: `Downloading ${filename}`,
+      });
     } catch (error) {
-      console.error("Error downloading file:", error);
+      console.error("Error downloading attachment:", error);
       toast({
         title: "Download failed",
-        description: "Failed to download file",
+        description:
+          error instanceof Error ? error.message : "Unknown error occurred",
         variant: "destructive",
       });
     }
@@ -236,21 +295,26 @@ export function AttachmentsManager() {
   };
 
   const getCategoryIcon = (category: string) => {
-    const categoryData = categories.find((c) => c.value === category);
-    const Icon = categoryData?.icon || File;
-    return <Icon className="h-4 w-4" />;
+    const categoryData = categories.find((cat) => cat.value === category);
+    return categoryData ? categoryData.icon : File;
   };
 
   const getCategoryBadge = (category: string) => {
-    const categoryData = categories.find((c) => c.value === category);
-    return categoryData?.label || category;
+    const categoryData = categories.find((cat) => cat.value === category);
+    return categoryData ? categoryData.label : "Unknown";
+  };
+
+  const getStorageColor = (percentage: number) => {
+    if (percentage >= 90) return "bg-red-500";
+    if (percentage >= 75) return "bg-yellow-500";
+    return "bg-green-500";
   };
 
   if (loading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Attachments</CardTitle>
+          <CardTitle>Attachments Manager</CardTitle>
           <CardDescription>Loading attachments...</CardDescription>
         </CardHeader>
         <CardContent>
@@ -264,12 +328,57 @@ export function AttachmentsManager() {
 
   return (
     <div className="space-y-6">
+      {/* Storage Quota Card */}
+      {quota && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <HardDrive className="h-5 w-5" />
+              <span>Storage Usage</span>
+            </CardTitle>
+            <CardDescription>
+              Your file storage quota and usage information
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Used: {quota.usedMB.toFixed(2)} MB</span>
+                <span>Available: {quota.maxMB} MB</span>
+              </div>
+              <Progress value={quota.percentageUsed} className="h-2" />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{quota.percentageUsed}% used</span>
+                <span>{quota.remainingMB.toFixed(2)} MB remaining</span>
+              </div>
+            </div>
+
+            {quota.percentageUsed >= 90 && (
+              <div className="flex items-center space-x-2 text-red-600 text-sm">
+                <AlertCircle className="h-4 w-4" />
+                <span>
+                  Storage almost full! Consider deleting unused files.
+                </span>
+              </div>
+            )}
+
+            {!quota.canUpload && (
+              <div className="flex items-center space-x-2 text-red-600 text-sm">
+                <AlertCircle className="h-4 w-4" />
+                <span>Storage full! Delete files to upload new ones.</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Upload Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Upload New Attachment</CardTitle>
+          <CardTitle>Upload Attachments</CardTitle>
           <CardDescription>
-            Upload files to use in your email campaigns (Max size: 5MB)
+            Upload files to attach to your email campaigns.
+            {quota && ` Maximum ${quota.maxMB}MB total storage per user.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -278,23 +387,30 @@ export function AttachmentsManager() {
             className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
               isDragActive
                 ? "border-primary bg-primary/5"
-                : "border-muted-foreground/25 hover:border-primary/50"
+                : quota?.canUpload === false
+                ? "border-red-300 bg-red-50 cursor-not-allowed"
+                : "border-muted-foreground/25 hover:border-primary hover:bg-primary/5"
             }`}
           >
-            <input {...getInputProps()} />
-            <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            {isDragActive ? (
-              <p className="text-lg">Drop the file here...</p>
+            <input {...getInputProps()} disabled={quota?.canUpload === false} />
+            <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            {quota?.canUpload === false ? (
+              <div>
+                <p className="text-lg font-medium text-red-600">Storage Full</p>
+                <p className="text-sm text-red-500">
+                  Delete files to upload new ones
+                </p>
+              </div>
+            ) : isDragActive ? (
+              <p className="text-lg font-medium">Drop the file here...</p>
             ) : (
               <div>
-                <p className="text-lg mb-2">
+                <p className="text-lg font-medium">
                   Drag & drop a file here, or click to select
                 </p>
-                <p className="text-sm text-muted-foreground mb-1">
+                <p className="text-sm text-muted-foreground mt-2">
                   Supports PDF, DOC, DOCX, images, TXT, and ZIP files
-                </p>
-                <p className="text-xs text-orange-600 font-medium">
-                  Maximum file size: 5MB
+                  {quota && ` (${quota.remainingMB.toFixed(2)}MB remaining)`}
                 </p>
               </div>
             )}
@@ -347,7 +463,10 @@ export function AttachmentsManager() {
                     <TableRow key={attachment.id}>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          {getCategoryIcon(attachment.category)}
+                          {(() => {
+                            const Icon = getCategoryIcon(attachment.category);
+                            return <Icon className="h-4 w-4" />;
+                          })()}
                           <div>
                             <p className="font-medium">{attachment.name}</p>
                             {attachment.description && (

@@ -101,13 +101,13 @@ export interface SmtpConfig {
   updated_at?: Date;
 }
 
-// Attachment interface with user association
+// Attachment interface with user association (updated for R2 storage)
 export interface Attachment {
   id?: number;
   user_id: string;
   name: string;
   original_name: string;
-  file_path: string;
+  r2_key: string; // R2 storage key instead of file_path
   file_size: number;
   mime_type: string;
   category: string;

@@ -49,21 +49,23 @@ export function EmailConfigWarning() {
 
   return (
     <Alert className="border-orange-200 bg-orange-50 dark:bg-orange-900/20">
-      <AlertTriangle className="h-4 w-4 text-orange-600" />
-      <AlertDescription className="text-orange-800 dark:text-orange-200">
-        <div className="flex items-center justify-between">
-          <span>
-            <strong>Email not configured:</strong> Set up your email credentials
-            to send campaigns.
-          </span>
-          <Link href="/email-setup">
-            <Button size="sm" variant="outline" className="ml-4">
-              <Settings className="h-4 w-4 mr-2" />
-              Configure Email
-            </Button>
-          </Link>
-        </div>
-      </AlertDescription>
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="h-4 w-4 mt-2 text-orange-600" />
+        <AlertDescription className="text-orange-800 dark:text-orange-200 w-full">
+          <div className="flex items-center justify-between">
+            <span>
+              <strong>Email not configured:</strong> Set up your email
+              credentials to send campaigns.
+            </span>
+            <Link href="/email-setup">
+              <Button size="sm" variant="outline" className="ml-4">
+                <Settings className="h-4 w-4 mr-2" />
+                Configure Email
+              </Button>
+            </Link>
+          </div>
+        </AlertDescription>
+      </div>
     </Alert>
   );
 }

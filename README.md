@@ -7,7 +7,7 @@ AutoSendr is a full-stack email automation platform designed for job seekers and
 - **📧 Smart Email Automation**: Send personalized emails using customizable templates
 - **🤖 AI-Powered Customization**: Leverage Groq API to enhance email personalization with configurable rules
 - **📊 Contact Management**: Upload and manage contact databases from CSV, JSON, or TXT files
-- **📎 Attachment Management**: Upload and manage resumes, portfolios, and documents for email campaigns
+- **📎 Attachment Management**: Upload and manage resumes, portfolios, and documents with Cloudflare R2 storage
 - **🔐 Secure Authentication**: Google OAuth for secure user management
 - **👥 Multi-User Support**: Each user has their own isolated data and settings
 - **🔐 Secure SMTP Integration**: User-specific email configurations with secure credential storage
@@ -25,7 +25,7 @@ AutoSendr is a full-stack email automation platform designed for job seekers and
 - **UI Components**: shadcn/ui (Radix UI + Tailwind CSS)
 - **Database**: Neon PostgreSQL (serverless)
 - **Deployment**: Vercel
-- **File Storage**: Local filesystem with database metadata
+- **File Storage**: Cloudflare R2 with user-specific quotas (50MB per user)
 
 ## Quick Start
 
@@ -78,6 +78,17 @@ AutoSendr is a full-stack email automation platform designed for job seekers and
 
    # AI (Optional)
    GROQ_API_KEY=your-groq-api-key
+
+   # Cloudflare R2 (for file storage)
+   R2_BUCKET_NAME=your-r2-bucket-name
+   R2_ACCOUNT_ID=your-cloudflare-account-id
+   R2_ACCESS_KEY_ID=your-r2-access-key-id
+   R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+   R2_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
+
+   # Storage Configuration
+   MAX_USER_STORAGE_MB=50
+   MAX_FILE_SIZE_MB=10
    ```
 
 4. **Run the development server**
@@ -118,6 +129,21 @@ Each user configures their own email credentials in the application:
 1. Sign up at [Groq Console](https://console.groq.com/)
 2. Create a new API key
 3. Add it to your `.env` file
+
+### Cloudflare R2 Setup
+
+1. Sign up at [Cloudflare](https://cloudflare.com/)
+2. Create an R2 bucket in your dashboard
+3. Generate R2 API tokens with read/write permissions
+4. Add the credentials to your `.env` file
+5. Run the database migration: `npm run migrate:r2`
+
+**R2 Features:**
+
+- User-specific storage quotas (50MB per user by default)
+- Automatic file cleanup on deletion
+- Secure presigned URLs for downloads
+- Seamless integration with email attachments
 
 ## Deployment to Vercel
 
@@ -160,7 +186,7 @@ AutoSendr supports multiple users with complete data isolation:
 2. **Templates**: User-specific templates (`email_templates` table)
 3. **AI Rules**: User-specific AI rules (`ai_rules` table)
 4. **Contacts**: User-specific contacts (`contacts` table)
-5. **Attachments/Resumes**: Files stored locally, metadata in database (`attachments` table)
+5. **Attachments/Resumes**: Files stored in Cloudflare R2, metadata in database (`attachments` table)
 6. **Email History**: User-specific email history (`email_sends` table)
 7. **SMTP Configuration**: User-specific SMTP settings (`smtp_config` table)
 

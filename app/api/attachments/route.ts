@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { existsSync } from "fs";
+import { r2Storage } from "@/lib/r2-storage";
 
 // GET - Fetch attachments for authenticated user
 export async function GET() {
@@ -25,11 +23,19 @@ export async function GET() {
 
     const userId = userResult.rows[0].id;
 
+    // Get attachments with R2 keys
     const result = await query(
       "SELECT * FROM attachments WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC",
       [userId]
     );
-    return NextResponse.json({ attachments: result.rows });
+
+    // Get storage quota information
+    const quota = await r2Storage.getUserStorageQuota(userId);
+
+    return NextResponse.json({
+      attachments: result.rows,
+      quota,
+    });
   } catch (error) {
     console.error("Error fetching attachments:", error);
     return NextResponse.json(
@@ -39,7 +45,7 @@ export async function GET() {
   }
 }
 
-// POST - Upload new attachment for authenticated user
+// POST - Upload new attachment for authenticated user using R2
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession();
@@ -68,50 +74,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // Check file size limit (5MB)
-    const maxFileSize = 5 * 1024 * 1024; // 5MB in bytes
-    if (file.size > maxFileSize) {
+    // Check if user can upload this file (includes size and quota checks)
+    const uploadCheck = await r2Storage.canUserUploadFile(userId, file.size);
+    if (!uploadCheck.canUpload) {
       return NextResponse.json(
         {
-          error: "File size too large",
-          message:
-            "File size must be under 5MB. Please compress your file or choose a smaller file.",
-          maxSize: "5MB",
-          fileSize: `${Math.round((file.size / (1024 * 1024)) * 100) / 100}MB`,
+          error: "Upload not allowed",
+          message: uploadCheck.reason,
         },
         { status: 413 }
       );
     }
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = join(process.cwd(), "uploads");
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
+    // Upload file to R2
+    const uploadResult = await r2Storage.uploadFile(userId, file, {
+      category,
+      description,
+    });
+
+    if (!uploadResult.success) {
+      return NextResponse.json(
+        {
+          error: "Upload failed",
+          message: uploadResult.error,
+        },
+        { status: 500 }
+      );
     }
 
-    // Generate unique filename
-    const timestamp = Date.now();
-    const fileExtension = file.name.split(".").pop();
-    const fileName = `${timestamp}-${file.name.replace(
-      /[^a-zA-Z0-9.-]/g,
-      "_"
-    )}`;
-    const filePath = join(uploadsDir, fileName);
-
-    // Save file to filesystem
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
-
-    // Save file info to database with user association
+    // Save file info to database with R2 key
     const result = await query(
-      `INSERT INTO attachments (user_id, name, original_name, file_path, file_size, mime_type, category, description) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO attachments (user_id, name, original_name, file_path, r2_key, file_size, mime_type, category, description) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         userId,
         name,
         file.name,
-        fileName, // Store relative path
+        null, // NULL for file_path since we're using R2
+        uploadResult.key, // Store R2 key instead of file path
         file.size,
         file.type,
         category,
@@ -119,9 +119,13 @@ export async function POST(request: NextRequest) {
       ]
     );
 
+    // Get updated quota information
+    const quota = await r2Storage.getUserStorageQuota(userId);
+
     return NextResponse.json({
-      message: "File uploaded successfully",
+      message: "File uploaded successfully to R2 storage",
       attachment: result.rows[0],
+      quota,
     });
   } catch (error) {
     console.error("Error uploading attachment:", error);
@@ -161,12 +165,43 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Soft delete - just mark as inactive (user-scoped)
+    // Get attachment info before deletion (user-scoped)
+    const attachmentResult = await query(
+      "SELECT r2_key FROM attachments WHERE id = $1 AND user_id = $2 AND is_active = true",
+      [id, userId]
+    );
+
+    if (attachmentResult.rows.length === 0) {
+      return NextResponse.json(
+        { error: "Attachment not found" },
+        { status: 404 }
+      );
+    }
+
+    const r2Key = attachmentResult.rows[0].r2_key;
+
+    // Delete from R2 storage (only if not a legacy file)
+    if (!r2Key.startsWith("legacy/")) {
+      const deleteSuccess = await r2Storage.deleteFile(r2Key);
+      if (!deleteSuccess) {
+        console.warn(`Failed to delete file from R2: ${r2Key}`);
+        // Continue with database deletion even if R2 deletion fails
+      }
+    }
+
+    // Soft delete in database - mark as inactive (user-scoped)
     await query(
       "UPDATE attachments SET is_active = false WHERE id = $1 AND user_id = $2",
       [id, userId]
     );
-    return NextResponse.json({ message: "Attachment deleted successfully" });
+
+    // Get updated quota information
+    const quota = await r2Storage.getUserStorageQuota(userId);
+
+    return NextResponse.json({
+      message: "Attachment deleted successfully",
+      quota,
+    });
   } catch (error) {
     console.error("Error deleting attachment:", error);
     return NextResponse.json(

@@ -72,6 +72,7 @@ export default function ApiKeysPage() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<Set<number>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -110,6 +111,11 @@ export default function ApiKeysPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Prevent multiple submissions
+    if (submitting) {
+      return;
+    }
+
     if (!formData.key_name.trim() || !formData.api_key.trim()) {
       toast({
         title: "Error",
@@ -118,6 +124,8 @@ export default function ApiKeysPage() {
       });
       return;
     }
+
+    setSubmitting(true);
 
     try {
       const url = editingKey
@@ -157,6 +165,8 @@ export default function ApiKeysPage() {
         description: "Failed to save API key",
         variant: "destructive",
       });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -183,9 +193,11 @@ export default function ApiKeysPage() {
         });
         fetchApiKeys();
       } else {
+        // Get the specific error message from the API response
+        const errorData = await response.json();
         toast({
           title: "Error",
-          description: "Failed to delete API key",
+          description: errorData.error || "Failed to delete API key",
           variant: "destructive",
         });
       }
@@ -218,9 +230,11 @@ export default function ApiKeysPage() {
         });
         fetchApiKeys();
       } else {
+        // Get the specific error message from the API response
+        const errorData = await response.json();
         toast({
           title: "Error",
-          description: "Failed to update API key status",
+          description: errorData.error || "Failed to update API key status",
           variant: "destructive",
         });
       }
@@ -270,6 +284,7 @@ export default function ApiKeysPage() {
     setFormData({ key_name: "", api_key: "", notes: "" });
     setEditingKey(null);
     setShowAddDialog(false);
+    setSubmitting(false);
   };
 
   if (status === "loading" || loading) {
@@ -394,11 +409,23 @@ export default function ApiKeysPage() {
                 </div>
 
                 <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={resetDialog}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetDialog}
+                    disabled={submitting}
+                  >
                     Cancel
                   </Button>
-                  <Button type="submit">
-                    {editingKey ? "Update" : "Add"} Key
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                        {editingKey ? "Updating..." : "Adding..."}
+                      </>
+                    ) : (
+                      `${editingKey ? "Update" : "Add"} Key`
+                    )}
                   </Button>
                 </div>
               </form>

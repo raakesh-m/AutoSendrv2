@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "migrate:r2": "node scripts/migrate-r2.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.828.0",
+    "@aws-sdk/s3-request-presigner": "^3.828.0",
     "@headlessui/react": "latest",
     "@hookform/resolvers": "^3.9.1",
     "@neondatabase/serverless": "^0.9.5",
@@ -45,6 +48,7 @@
     "cmdk": "1.0.4",
     "csv-parser": "^3.0.0",
     "date-fns": "4.1.0",
+    "dotenv": "^16.5.0",
     "embla-carousel-react": "8.5.1",
     "groq-sdk": "^0.3.3",
     "input-otp": "1.4.1",

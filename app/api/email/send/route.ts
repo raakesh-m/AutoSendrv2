@@ -5,6 +5,9 @@ import { enhanceEmail } from "@/lib/email-enhancement";
 import { updateProgress } from "./progress/route";
 import { join } from "path";
 import { getServerSession } from "next-auth/next";
+import { r2Storage } from "@/lib/r2-storage";
+import { writeFile, unlink, mkdir } from "fs/promises";
+import { existsSync } from "fs";
 
 // Function to fetch the default email template
 async function getDefaultTemplate() {
@@ -178,7 +181,7 @@ export async function POST(request: NextRequest) {
         console.log(
           `   - ${attachment.name} (${Math.round(
             attachment.file_size / 1024
-          )} KB)`
+          )} KB) [${attachment.r2_key.startsWith("legacy/") ? "Legacy" : "R2"}]`
         );
       }
     }
@@ -304,6 +307,7 @@ export async function POST(request: NextRequest) {
       // Initialize variables outside try block
       let personalizedSubject = emailTemplate.subject;
       let personalizedBody = emailTemplate.body;
+      let tempFiles: string[] = []; // Track temp files for cleanup
 
       try {
         // Replace template variables with contact data
@@ -550,11 +554,68 @@ export async function POST(request: NextRequest) {
           });
 
           // Prepare attachments for nodemailer
-          const mailAttachments = attachments.map((attachment) => ({
-            filename: attachment.original_name,
-            path: join(process.cwd(), "uploads", attachment.file_path),
-            contentType: attachment.mime_type,
-          }));
+          const mailAttachments = [];
+
+          for (const attachment of attachments) {
+            if (attachment.r2_key.startsWith("legacy/")) {
+              // Handle legacy files (local filesystem)
+              const legacyPath = attachment.r2_key.replace("legacy/", "");
+              mailAttachments.push({
+                filename: attachment.original_name,
+                path: join(process.cwd(), "uploads", legacyPath),
+                contentType: attachment.mime_type,
+              });
+            } else {
+              // Handle R2 files - download temporarily
+              try {
+                const downloadUrl = await r2Storage.getDownloadUrl(
+                  attachment.r2_key,
+                  3600
+                );
+
+                // Download file content
+                const response = await fetch(downloadUrl);
+                if (!response.ok) {
+                  throw new Error(
+                    `Failed to download ${attachment.name} from R2`
+                  );
+                }
+
+                const buffer = Buffer.from(await response.arrayBuffer());
+
+                // Create temp directory if it doesn't exist
+                const tempDir = join(process.cwd(), "temp");
+                if (!existsSync(tempDir)) {
+                  await mkdir(tempDir, { recursive: true });
+                }
+
+                // Save to temporary file
+                const tempFileName = `temp_${Date.now()}_${
+                  attachment.original_name
+                }`;
+                const tempPath = join(tempDir, tempFileName);
+                await writeFile(tempPath, buffer);
+
+                tempFiles.push(tempPath); // Track for cleanup
+
+                mailAttachments.push({
+                  filename: attachment.original_name,
+                  path: tempPath,
+                  contentType: attachment.mime_type,
+                });
+
+                console.log(
+                  `   📥 Downloaded ${attachment.name} from R2 for email`
+                );
+              } catch (error) {
+                console.error(
+                  `   ❌ Failed to download ${attachment.name} from R2:`,
+                  error
+                );
+                // Continue without this attachment rather than failing the entire email
+              }
+            }
+          }
 
           const mailOptions = {
             from: `"${smtpConfig.email.split("@")[0]}" <${smtpConfig.email}>`,
@@ -605,6 +666,16 @@ export async function POST(request: NextRequest) {
           }
 
           console.log(`   ✅ Email sent successfully`);
+
+          // Cleanup temporary files
+          for (const tempFile of tempFiles) {
+            try {
+              await unlink(tempFile);
+              console.log(`   🗑️ Cleaned up temp file: ${tempFile}`);
+            } catch (error) {
+              console.warn(`   ⚠️ Failed to cleanup temp file: ${tempFile}`);
+            }
+          }
 
           emailResults.push({
             contact: contact.email,
@@ -672,6 +743,18 @@ export async function POST(request: NextRequest) {
             errorMessage,
           ]
         );
+
+        // Cleanup temporary files in case of error
+        for (const tempFile of tempFiles) {
+          try {
+            await unlink(tempFile);
+            console.log(`   🗑️ Cleaned up temp file after error: ${tempFile}`);
+          } catch (cleanupError) {
+            console.warn(
+              `   ⚠️ Failed to cleanup temp file after error: ${tempFile}`
+            );
+          }
+        }
 
         emailResults.push({
           contact: contact.email,
