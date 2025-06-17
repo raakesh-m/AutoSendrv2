@@ -1,6 +1,5 @@
-import Groq from "groq-sdk";
+import { aiKeyManager } from "@/lib/ai-key-manager";
 import { query } from "@/lib/db";
-import { groqKeyManager } from "@/lib/groq-key-manager";
 
 interface EnhancementOptions {
   subject: string;
@@ -9,7 +8,7 @@ interface EnhancementOptions {
   position?: string;
   recruiterName?: string;
   useAi?: boolean;
-  userId?: string;
+  userId: string; // Made required since we need it for AI calls
 }
 
 interface EnhancementResult {
@@ -81,7 +80,7 @@ CRITICAL: Your job is ONLY to replace placeholders. Do not enhance, improve, or 
   }
 }
 
-// Enhanced email processing function with multi-key support
+// Enhanced email processing function with multi-provider AI support
 export async function enhanceEmail(
   options: EnhancementOptions
 ): Promise<EnhancementResult> {
@@ -105,41 +104,7 @@ export async function enhanceEmail(
     };
   }
 
-  // Require userId for AI enhancement
-  if (!userId) {
-    return {
-      subject,
-      body,
-      aiEnhanced: false,
-      error: "User ID required for AI enhancement",
-      message: "Cannot fetch user-specific AI rules without user ID",
-    };
-  }
-
   try {
-    // Get an available API key using the key manager
-    const apiKey = await groqKeyManager.getAvailableKey();
-
-    if (!apiKey) {
-      return {
-        subject,
-        body,
-        aiEnhanced: false,
-        error: "AI quota exceeded",
-        message: "All API keys have reached their rate limits",
-      };
-    }
-
-    // Log which key is being used (but mask it for security)
-    const keyStats = await groqKeyManager.getKeyStats();
-    const maskedKey =
-      apiKey.slice(0, 4) + "*".repeat(apiKey.length - 8) + apiKey.slice(-4);
-    console.log(
-      `🎯 Using API key: ${maskedKey} | Remaining today: ${
-        keyStats.totalDailyCapacity - keyStats.usedToday
-      }`
-    );
-
     // Get active AI rules for this specific user
     const aiRules = await getActiveAiRules(userId);
 
@@ -158,28 +123,27 @@ Please enhance this email following the rules above. Return the result in this e
 Subject: [enhanced subject]
 Body: [enhanced body]`;
 
-    // Initialize Groq client with the selected key
-    const groq = new Groq({
-      apiKey: apiKey,
+    // Use the new AI key manager to make the request
+    const result = await aiKeyManager.makeAIRequest({
+      userId,
+      prompt,
+      maxTokens: 500,
+      temperature: 0.1,
     });
 
-    const completion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      model: "llama3-8b-8192",
-      temperature: 0.1, // Low temperature for consistency
-      max_tokens: 500, // Conservative token limit
-    });
+    if (!result.success) {
+      return {
+        subject,
+        body,
+        aiEnhanced: false,
+        error: result.error || "AI enhancement failed",
+        message: result.error || "AI temporarily unavailable",
+      };
+    }
 
-    const aiResponse = completion.choices[0]?.message?.content;
+    const aiResponse = result.response;
 
     if (!aiResponse) {
-      // Record failed usage
-      await groqKeyManager.recordKeyUsage(apiKey, false, "no_response");
       throw new Error("No response from AI");
     }
 
@@ -198,73 +162,23 @@ Body: [enhanced body]`;
       enhancedBody = bodyMatch[1].trim();
     }
 
-    // Record successful usage
-    await groqKeyManager.recordKeyUsage(apiKey, true);
-
     return {
       subject: enhancedSubject,
       body: enhancedBody,
       aiEnhanced: true,
-      message: "Email enhanced successfully",
+      message: `Email enhanced successfully using ${result.provider}`,
     };
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     console.error("Error enhancing email:", errorMessage);
 
-    // Try to get the API key that was used for error recording
-    const apiKey = await groqKeyManager.getAvailableKey();
-
-    // Handle specific error types and record key usage
-    if (
-      errorMessage.includes("rate_limit_exceeded") ||
-      errorMessage.includes("429")
-    ) {
-      if (apiKey) {
-        await groqKeyManager.recordKeyUsage(
-          apiKey,
-          false,
-          "rate_limit_exceeded"
-        );
-      }
-
-      return {
-        subject,
-        body,
-        aiEnhanced: false,
-        error: "AI rate limit reached",
-        message: "Rate limit exceeded on current key, will try next key",
-      };
-    }
-
-    if (
-      errorMessage.includes("insufficient_quota") ||
-      errorMessage.includes("billing")
-    ) {
-      if (apiKey) {
-        await groqKeyManager.recordKeyUsage(apiKey, false, "quota_exceeded");
-      }
-
-      return {
-        subject,
-        body,
-        aiEnhanced: false,
-        error: "AI quota exceeded",
-        message: "Quota limit reached on current key",
-      };
-    }
-
-    // Generic AI error
-    if (apiKey) {
-      await groqKeyManager.recordKeyUsage(apiKey, false, "generic_error");
-    }
-
     return {
       subject,
       body,
       aiEnhanced: false,
       error: "AI enhancement failed",
-      message: "AI temporarily unavailable, trying next key",
+      message: errorMessage,
     };
   }
 }

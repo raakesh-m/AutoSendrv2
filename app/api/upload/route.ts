@@ -3,16 +3,34 @@ import Groq from "groq-sdk";
 import { query } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 
-// Initialize Groq client function that uses key manager
+// Initialize Groq client function that uses AI key manager
 async function createGroqClient() {
-  const { groqKeyManager } = await import("@/lib/groq-key-manager");
-  const apiKey = await groqKeyManager.getAvailableKey();
+  const { aiKeyManager } = await import("@/lib/ai-key-manager");
+  const { getServerSession } = await import("next-auth/next");
+
+  const session = await getServerSession();
+  if (!session?.user?.email) {
+    throw new Error("Authentication required");
+  }
+
+  // Get user ID
+  const { query } = await import("@/lib/db");
+  const userResult = await query("SELECT id FROM users WHERE email = $1", [
+    session.user.email,
+  ]);
+
+  if (userResult.rows.length === 0) {
+    throw new Error("User not found");
+  }
+
+  const userId = userResult.rows[0].id;
+  const apiKey = await aiKeyManager.getBestAvailableKey(userId, "groq");
 
   if (!apiKey) {
     throw new Error("No Groq API keys available");
   }
 
-  return new Groq({ apiKey });
+  return new Groq({ apiKey: apiKey.api_key });
 }
 
 // Global session store (in production, use Redis or database)
@@ -62,14 +80,15 @@ function updateSessionProgress(
 // Function to batch process contacts with AI (much faster than individual calls)
 async function batchEnrichContacts(
   contacts: any[],
-  sessionId: string
+  sessionId: string,
+  userId: string
 ): Promise<any[]> {
   try {
     // Check if API keys are available
-    const { groqKeyManager } = await import("@/lib/groq-key-manager");
-    const hasApiKeys = await groqKeyManager.getAvailableKey();
+    const { aiKeyManager } = await import("@/lib/ai-key-manager");
+    const bestKey = await aiKeyManager.getBestAvailableKey(userId);
 
-    if (!hasApiKeys || contacts.length === 0) {
+    if (!bestKey || contacts.length === 0) {
       console.log(
         "⚠️ Skipping AI enrichment - no API keys available or no contacts"
       );
@@ -396,7 +415,8 @@ export async function POST(request: NextRequest) {
     console.log(`🤖 Starting batch AI enrichment...`);
     const enrichedContacts = await batchEnrichContacts(
       validContacts,
-      sessionId
+      sessionId,
+      userId
     );
 
     updateSessionProgress(sessionId, {

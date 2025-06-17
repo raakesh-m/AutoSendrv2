@@ -1,5 +1,4 @@
 import { aiKeyManager } from "./ai-key-manager";
-import { groqKeyManager } from "./groq-key-manager";
 import { toast } from "@/hooks/use-toast";
 
 interface EmailGenerationOptions {

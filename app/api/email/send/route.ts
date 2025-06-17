@@ -230,8 +230,20 @@ export async function POST(request: NextRequest) {
 
     if (useAiCustomization) {
       // Log API key status at campaign start
-      const { groqKeyManager } = await import("@/lib/groq-key-manager");
-      const keyStats = await groqKeyManager.getKeyStats();
+      const { aiKeyManager } = await import("@/lib/ai-key-manager");
+      // Get basic stats for the user
+      const userPreferences = await aiKeyManager.getUserPreferences(userId);
+      const availableKeys = await aiKeyManager.getAvailableKeys(userId);
+      const keyStats = {
+        totalKeys: availableKeys.length,
+        activeKeys: availableKeys.filter((k) => k.is_active).length,
+        rateLimitedKeys: 0, // Can't easily calculate without checking each key
+        totalDailyCapacity: availableKeys.reduce(
+          (sum, k) => sum + (k.daily_limit || 0),
+          0
+        ),
+        usedToday: availableKeys.reduce((sum, k) => sum + k.usage_count, 0),
+      };
       console.log(`🔑 API Key Status:`);
       console.log(
         `   📊 Total Keys: ${keyStats.totalKeys} | Active: ${keyStats.activeKeys} | Rate Limited: ${keyStats.rateLimitedKeys}`
@@ -366,11 +378,11 @@ export async function POST(request: NextRequest) {
                 `🤖 Starting AI enhancement for ${contact.name} (${contact.email})...`
               );
 
-              // Log which key will be used (before the call)
-              const { groqKeyManager } = await import("@/lib/groq-key-manager");
-              const selectedKey = await groqKeyManager.getAvailableKey();
+              // Check if AI keys are available
+              const { aiKeyManager } = await import("@/lib/ai-key-manager");
+              const bestKey = await aiKeyManager.getBestAvailableKey(userId);
 
-              if (!selectedKey) {
+              if (!bestKey) {
                 console.log(
                   `❌ No API keys available - skipping ${contact.name}`
                 );

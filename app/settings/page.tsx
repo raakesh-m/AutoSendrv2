@@ -74,10 +74,10 @@ export default function SettingsPage() {
       color: "amber",
     },
     {
-      title: "API Keys",
-      description: "Manage your Groq API keys for AI enhancement",
+      title: "AI Keys",
+      description: "Manage your AI provider API keys for AI enhancement",
       icon: Key,
-      href: "/api-keys",
+      href: "/ai-keys",
       color: "green",
     },
   ];
