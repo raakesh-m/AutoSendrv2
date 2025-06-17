@@ -4,6 +4,9 @@ import nodemailer from "nodemailer";
 import { enhanceEmail } from "@/lib/email-enhancement";
 import { join } from "path";
 import { getServerSession } from "next-auth/next";
+import { r2Storage } from "@/lib/r2-storage";
+import { existsSync } from "fs";
+import { mkdir, writeFile, unlink } from "fs/promises";
 
 // Function to fetch the default email template (same as bulk email)
 async function getDefaultTemplate() {
@@ -59,6 +62,8 @@ Your Name`,
 
 // POST - Send single email using same system as bulk emails
 export async function POST(request: NextRequest) {
+  let tempFiles: string[] = []; // Track temp files for cleanup - declared at function scope
+
   try {
     const {
       to,
@@ -154,9 +159,9 @@ export async function POST(request: NextRequest) {
     console.log(`📋 Using template: ${emailTemplate.name}`);
 
     console.log(`📎 Fetching attachments...`);
-    // Get active attachments for this user
+    // Get active attachments for this user - updated for R2 storage
     const attachmentsResult = await query(
-      "SELECT id, name, original_name, file_path, file_size, mime_type FROM attachments WHERE user_id = $1 AND is_active = true",
+      "SELECT id, name, original_name, r2_key, file_size, mime_type FROM attachments WHERE user_id = $1 AND is_active = true",
       [userId]
     );
     const attachments = attachmentsResult.rows;
@@ -232,12 +237,63 @@ export async function POST(request: NextRequest) {
 
     console.log(`📮 Preparing email with ${attachments.length} attachments...`);
 
-    // Prepare attachments for nodemailer (same as bulk email)
-    const mailAttachments = attachments.map((attachment) => ({
-      filename: attachment.original_name,
-      path: join(process.cwd(), "uploads", attachment.file_path),
-      contentType: attachment.mime_type,
-    }));
+    // Prepare attachments for nodemailer - updated for R2 storage
+    const mailAttachments = [];
+
+    for (const attachment of attachments) {
+      if (attachment.r2_key.startsWith("legacy/")) {
+        // Handle legacy files (local filesystem)
+        const legacyPath = attachment.r2_key.replace("legacy/", "");
+        mailAttachments.push({
+          filename: attachment.original_name,
+          path: join(process.cwd(), "uploads", legacyPath),
+          contentType: attachment.mime_type,
+        });
+      } else {
+        // Handle R2 files - download temporarily
+        try {
+          const downloadUrl = await r2Storage.getDownloadUrl(
+            attachment.r2_key,
+            3600
+          );
+
+          // Download file content
+          const response = await fetch(downloadUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to download ${attachment.name} from R2`);
+          }
+
+          const buffer = Buffer.from(await response.arrayBuffer());
+
+          // Create temp directory if it doesn't exist
+          const tempDir = join(process.cwd(), "temp");
+          if (!existsSync(tempDir)) {
+            await mkdir(tempDir, { recursive: true });
+          }
+
+          // Save to temporary file
+          const tempFileName = `temp_${Date.now()}_${attachment.original_name}`;
+          const tempPath = join(tempDir, tempFileName);
+          await writeFile(tempPath, buffer);
+
+          tempFiles.push(tempPath); // Track for cleanup
+
+          mailAttachments.push({
+            filename: attachment.original_name,
+            path: tempPath,
+            contentType: attachment.mime_type,
+          });
+
+          console.log(`   📥 Downloaded ${attachment.name} from R2 for email`);
+        } catch (error) {
+          console.error(
+            `   ❌ Failed to download ${attachment.name} from R2:`,
+            error
+          );
+          // Continue without this attachment rather than failing the entire email
+        }
+      }
+    }
 
     // Create mail options using user's SMTP config
     const mailOptions = {
@@ -268,6 +324,16 @@ export async function POST(request: NextRequest) {
 
     await transporter.sendMail(mailOptions);
 
+    // Cleanup temporary files
+    for (const tempFile of tempFiles) {
+      try {
+        await unlink(tempFile);
+        console.log(`   🗑️ Cleaned up temp file: ${tempFile}`);
+      } catch (error) {
+        console.warn(`   ⚠️ Failed to cleanup temp file: ${tempFile}`);
+      }
+    }
+
     console.log(`✅ Email sent successfully to ${to}`);
     console.log(
       `📊 Final stats: AI Enhanced: ${aiEnhanced}, Attachments: ${attachments.length}`
@@ -286,6 +352,20 @@ export async function POST(request: NextRequest) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     console.error("❌ Error sending single email:", errorMessage);
+
+    // Cleanup temporary files in case of error
+    try {
+      for (const tempFile of tempFiles) {
+        try {
+          await unlink(tempFile);
+          console.log(`   🗑️ Cleaned up temp file: ${tempFile}`);
+        } catch (cleanupError) {
+          console.warn(`   ⚠️ Failed to cleanup temp file: ${tempFile}`);
+        }
+      }
+    } catch (cleanupError) {
+      console.warn("Error during temp file cleanup:", cleanupError);
+    }
 
     return NextResponse.json(
       {
