@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
       position,
       recruiterName,
       useAiCustomization = true, // Default to true for single emails
+      attachmentIds = [], // Selected attachment IDs
     } = await request.json();
 
     console.log(`\n🚀 Starting single email send to ${to}`);
@@ -158,14 +159,17 @@ export async function POST(request: NextRequest) {
     const emailTemplate = templateResult.rows[0];
     console.log(`📋 Using template: ${emailTemplate.name}`);
 
-    console.log(`📎 Fetching attachments...`);
-    // Get active attachments for this user - updated for R2 storage
-    const attachmentsResult = await query(
-      "SELECT id, name, original_name, r2_key, file_size, mime_type FROM attachments WHERE user_id = $1 AND is_active = true",
-      [userId]
-    );
-    const attachments = attachmentsResult.rows;
-    console.log(`📎 Found ${attachments.length} active attachments`);
+    console.log(`📎 Fetching selected attachments...`);
+    // Get selected attachments for this user - updated for R2 storage
+    let attachments: any[] = [];
+    if (attachmentIds.length > 0) {
+      const attachmentsResult = await query(
+        "SELECT id, name, original_name, r2_key, file_size, mime_type FROM attachments WHERE user_id = $1 AND id = ANY($2) AND is_active = true",
+        [userId, attachmentIds]
+      );
+      attachments = attachmentsResult.rows;
+    }
+    console.log(`📎 Found ${attachments.length} selected attachments`);
 
     // Personalize template with contact data (same as bulk email)
     const role = position || "Software Developer";

@@ -18,6 +18,7 @@ import {
   Brain,
   Paperclip,
   Key,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AutoSendrLogo } from "@/components/autosendr-logo";
@@ -27,6 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Single Email Sender", href: "/single-email-sender", icon: TestTube },
+  { name: "Bulk Email Sender", href: "/bulk-email-sender", icon: Send },
   {
     name: "Settings",
     href: "/settings",

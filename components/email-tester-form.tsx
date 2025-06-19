@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Card,
@@ -14,6 +14,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Send,
   RefreshCw,
@@ -24,6 +33,9 @@ import {
   Building2,
   Settings,
   Sparkles,
+  Paperclip,
+  File,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -32,6 +44,16 @@ interface SendingState {
   step: string;
   progress: number;
   logs: string[];
+}
+
+interface Attachment {
+  id: number;
+  name: string;
+  original_name: string;
+  file_size: number;
+  mime_type: string;
+  category: string;
+  description?: string;
 }
 
 export function EmailTesterForm() {
@@ -48,6 +70,12 @@ export function EmailTesterForm() {
     logs: [],
   });
   const [emailSent, setEmailSent] = useState(false);
+  const [selectedAttachments, setSelectedAttachments] = useState<number[]>([]);
+  const [availableAttachments, setAvailableAttachments] = useState<
+    Attachment[]
+  >([]);
+  const [showAttachmentsDialog, setShowAttachmentsDialog] = useState(false);
+  const [loadingAttachments, setLoadingAttachments] = useState(true);
   const { toast } = useToast();
 
   // Form validation
@@ -69,6 +97,40 @@ export function EmailTesterForm() {
       step,
       progress,
     }));
+  };
+
+  const fetchAttachments = async () => {
+    try {
+      setLoadingAttachments(true);
+      const response = await fetch("/api/attachments");
+      if (!response.ok) throw new Error("Failed to fetch attachments");
+
+      const data = await response.json();
+      setAvailableAttachments(data.attachments || []);
+    } catch (error) {
+      console.error("Error fetching attachments:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch attachments",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAttachments(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAttachments();
+  }, []);
+
+  const handleAttachmentSelect = (attachmentId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedAttachments((prev) => [...prev, attachmentId]);
+    } else {
+      setSelectedAttachments((prev) =>
+        prev.filter((id) => id !== attachmentId)
+      );
+    }
   };
 
   const handleSendEmail = async () => {
@@ -100,7 +162,7 @@ export function EmailTesterForm() {
       updateProgress("Sending email...", 70);
       addLog(`Sending email to ${formData.recipientEmail}...`);
 
-      // Send the email using unified system
+      // Send the email using unified system with selected attachments
       const response = await fetch("/api/email/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -110,6 +172,7 @@ export function EmailTesterForm() {
           position: formData.position,
           recruiterName: formData.recruiterName,
           useAiCustomization: true, // Always use AI for single emails
+          attachmentIds: selectedAttachments, // Include selected attachments
         }),
       });
 
@@ -144,6 +207,7 @@ export function EmailTesterForm() {
             position: "",
             recruiterName: "",
           });
+          setSelectedAttachments([]);
           setEmailSent(false);
           setSendingState({
             isActive: false,
@@ -311,6 +375,194 @@ export function EmailTesterForm() {
           </div>
         </div>
 
+        {/* Attachments Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              Attachments ({selectedAttachments.length} selected)
+            </Label>
+            {availableAttachments.length > 3 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAttachmentsDialog(true)}
+                disabled={sendingState.isActive}
+              >
+                <File className="h-4 w-4 mr-2" />
+                Show More ({availableAttachments.length - 3} more)
+              </Button>
+            )}
+          </div>
+
+          {loadingAttachments ? (
+            <div className="flex items-center gap-2 p-4 border rounded-lg bg-muted/30">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span className="text-sm text-muted-foreground">
+                Loading attachments...
+              </span>
+            </div>
+          ) : availableAttachments.length === 0 ? (
+            <div className="text-center py-6 border rounded-lg bg-muted/30">
+              <File className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm text-muted-foreground">
+                No attachments available
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Upload files in{" "}
+                <Link
+                  href="/attachments"
+                  className="text-blue-600 hover:underline"
+                >
+                  Attachments Settings
+                </Link>
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Top 3 attachments shown directly */}
+              <div className="space-y-2">
+                {availableAttachments.slice(0, 3).map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <Checkbox
+                      checked={selectedAttachments.includes(attachment.id)}
+                      onCheckedChange={(checked) =>
+                        handleAttachmentSelect(
+                          attachment.id,
+                          checked as boolean
+                        )
+                      }
+                      disabled={sendingState.isActive}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <File className="h-4 w-4 text-blue-500" />
+                        <span className="font-medium text-sm">
+                          {attachment.name}
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {attachment.category}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {(attachment.file_size / 1024).toFixed(1)} KB •{" "}
+                        {attachment.mime_type}
+                      </div>
+                      {attachment.description && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {attachment.description}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Selected attachments summary */}
+              {selectedAttachments.length > 0 && (
+                <div className="pt-2 border-t">
+                  <div className="flex flex-wrap gap-2">
+                    {selectedAttachments.map((attachmentId) => {
+                      const attachment = availableAttachments.find(
+                        (att) => att.id === attachmentId
+                      );
+                      if (!attachment) return null;
+
+                      return (
+                        <Badge
+                          key={attachmentId}
+                          variant="secondary"
+                          className="flex items-center gap-1 px-2 py-1"
+                        >
+                          <Paperclip className="h-3 w-3" />
+                          <span className="text-xs">{attachment.name}</span>
+                          <button
+                            onClick={() =>
+                              handleAttachmentSelect(attachmentId, false)
+                            }
+                            className="ml-1 hover:text-red-500"
+                            disabled={sendingState.isActive}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Attachments Dialog - Only shows when there are more than 3 attachments */}
+        <Dialog
+          open={showAttachmentsDialog}
+          onOpenChange={setShowAttachmentsDialog}
+        >
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>All Attachments</DialogTitle>
+              <DialogDescription>
+                Choose which attachments to include with your email
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-3">
+                {availableAttachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <Checkbox
+                      checked={selectedAttachments.includes(attachment.id)}
+                      onCheckedChange={(checked) =>
+                        handleAttachmentSelect(
+                          attachment.id,
+                          checked as boolean
+                        )
+                      }
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <File className="h-4 w-4 text-blue-500" />
+                        <span className="font-medium text-sm">
+                          {attachment.name}
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {attachment.category}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {(attachment.file_size / 1024).toFixed(1)} KB •{" "}
+                        {attachment.mime_type}
+                      </div>
+                      {attachment.description && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {attachment.description}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAttachmentsDialog(false)}
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Progress Section */}
         {sendingState.isActive && (
           <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
@@ -372,7 +624,8 @@ export function EmailTesterForm() {
           {!sendingState.isActive && !emailSent && (
             <p className="text-xs text-muted-foreground mt-3 text-center">
               Uses your saved template • AI enhancement when available •
-              Real-time progress tracking
+              Real-time progress tracking • {selectedAttachments.length}{" "}
+              attachment(s) selected
             </p>
           )}
         </div>
