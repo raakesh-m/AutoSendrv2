@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Use global variables to persist across API route executions
-// This works in development and most deployment environments
+// Global progress storage for development and deployment environments
 declare global {
   var progressStore: Map<string, any> | undefined;
   var completionTracker: Map<string, boolean> | undefined;
 }
 
-// Initialize global stores if they don't exist
+// Initialize global stores
 if (!global.progressStore) {
   global.progressStore = new Map<string, any>();
 }
@@ -15,9 +14,11 @@ if (!global.completionTracker) {
   global.completionTracker = new Map<string, boolean>();
 }
 
-// Use the global stores
 const progressStore = global.progressStore;
 const completionTracker = global.completionTracker;
+
+// Store active controllers for immediate updates
+const streamControllers = new Map<string, ReadableStreamDefaultController>();
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -27,7 +28,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Session ID required" }, { status: 400 });
   }
 
-  // Set up Server-Sent Events
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
@@ -38,19 +38,23 @@ export async function GET(request: NextRequest) {
           try {
             controller.close();
             isClosed = true;
-            // Only log connection close for debugging if needed
+            streamControllers.delete(sessionId);
           } catch (error) {
-            // Controller already closed or invalid state - this is expected
+            // Controller already closed - expected behavior
           }
         }
       };
 
-      // Send initial connection
+      // Register controller for immediate updates
+      streamControllers.set(sessionId, controller);
+
+      // Send initial connection confirmation
       const connectMsg = JSON.stringify({ type: "connected" });
       controller.enqueue(encoder.encode(`data: ${connectMsg}\n\n`));
-      // Removed verbose connection message log
 
-      // Check for updates every 500ms
+      let lastSentTimestamp = 0;
+
+      // Check for updates every 100ms for responsive real-time updates
       const interval = setInterval(() => {
         if (isClosed) {
           clearInterval(interval);
@@ -59,22 +63,22 @@ export async function GET(request: NextRequest) {
 
         const progress = progressStore.get(sessionId);
 
-        if (progress) {
+        if (progress && progress.timestamp !== lastSentTimestamp) {
           try {
             const progressMsg = JSON.stringify(progress);
             controller.enqueue(encoder.encode(`data: ${progressMsg}\n\n`));
+            lastSentTimestamp = progress.timestamp;
 
-            // Clean up when completed - send completion message once then stop immediately
+            // Handle completion cleanup
             if (progress.completed && !completionTracker.get(sessionId)) {
               completionTracker.set(sessionId, true);
               console.log(
                 `🎉 Campaign completed: ${progress.sent} emails sent successfully`
               );
 
-              // Stop the interval immediately to prevent duplicate messages
               clearInterval(interval);
 
-              // Clean up after a short delay to ensure message is delivered
+              // Cleanup after ensuring message delivery
               setTimeout(() => {
                 progressStore.delete(sessionId);
                 completionTracker.delete(sessionId);
@@ -82,16 +86,16 @@ export async function GET(request: NextRequest) {
               }, 500);
             }
           } catch (error) {
-            // Stream is closed, clean up silently
             clearInterval(interval);
             isClosed = true;
           }
         }
-      }, 500);
+      }, 100);
 
       // Cleanup on client disconnect
       request.signal.addEventListener("abort", () => {
         clearInterval(interval);
+        streamControllers.delete(sessionId);
         safeClose();
       });
     },
@@ -108,15 +112,30 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// Helper function to update progress (called from the main send API)
+// Helper function to update progress with immediate streaming
 export function updateProgress(sessionId: string, progressData: any) {
-  progressStore.set(sessionId, {
+  const dataWithTimestamp = {
     ...progressData,
     timestamp: Date.now(),
-  });
+  };
+
+  progressStore.set(sessionId, dataWithTimestamp);
+
+  // Send immediately to active stream if available
+  const controller = streamControllers.get(sessionId);
+  if (controller) {
+    try {
+      const encoder = new TextEncoder();
+      const progressMsg = JSON.stringify(dataWithTimestamp);
+      controller.enqueue(encoder.encode(`data: ${progressMsg}\n\n`));
+    } catch (error) {
+      // Stream closed, clean up controller
+      streamControllers.delete(sessionId);
+    }
+  }
 }
 
-// Helper function to get progress
+// Helper function to get current progress
 export function getProgress(sessionId: string) {
   return progressStore.get(sessionId);
 }

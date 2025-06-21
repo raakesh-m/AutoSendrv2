@@ -630,102 +630,83 @@ export function BulkEmailSender() {
         </DialogContent>
       </Dialog>
 
-      {/* Campaign Progress Card */}
-      {(bulkSendingState.isActive || campaignCompleted) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {bulkSendingState.isActive ? (
-                  <RefreshCw className="h-5 w-5 animate-spin" />
-                ) : (
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                )}
-                Campaign Progress
-              </div>
-              {bulkSendingState.isActive && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleStopCampaign}
-                >
-                  Stop Campaign
-                </Button>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Progress</span>
-                <span>{Math.round(bulkSendingState.progress)}%</span>
-              </div>
-              <Progress value={bulkSendingState.progress} className="h-2" />
+      {/* Real-time Progress Section - Same style as single email sender */}
+      {bulkSendingState.isActive && (
+        <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium text-blue-900">
+              {bulkSendingState.currentEmail || "Processing bulk emails..."}
+            </h4>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-blue-700">
+                {bulkSendingState.sent + bulkSendingState.failed}/
+                {bulkSendingState.total} processed
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleStopCampaign}
+                className="bg-white"
+              >
+                Stop Campaign
+              </Button>
             </div>
+          </div>
+          <Progress value={bulkSendingState.progress} className="h-2" />
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div>
-                <div className="text-2xl font-bold text-green-600">
-                  {bulkSendingState.sent}
-                </div>
-                <div className="text-xs text-muted-foreground">Sent</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-red-600">
-                  {bulkSendingState.failed}
-                </div>
-                <div className="text-xs text-muted-foreground">Failed</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-blue-600">
-                  {bulkSendingState.aiEnhanced}
-                </div>
-                <div className="text-xs text-muted-foreground">AI Enhanced</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold">
-                  {bulkSendingState.total}
-                </div>
-                <div className="text-xs text-muted-foreground">Total</div>
+          {/* Live logs - Same style as single email sender */}
+          {bulkSendingState.logs.length > 0 && (
+            <div className="space-y-1">
+              <h5 className="text-sm font-medium text-blue-800">
+                Progress Log:
+              </h5>
+              <div className="bg-white rounded border p-3 max-h-40 overflow-y-auto">
+                {bulkSendingState.logs.slice(-20).map((log, index) => (
+                  <div key={index} className="text-xs text-gray-600 font-mono">
+                    {log}
+                  </div>
+                ))}
               </div>
             </div>
+          )}
+        </div>
+      )}
 
-            {bulkSendingState.currentEmail && (
-              <Alert>
-                <Clock className="h-4 w-4" />
-                <AlertDescription>
-                  Currently processing: {bulkSendingState.currentEmail}
-                  {bulkSendingState.estimatedTimeRemaining && (
-                    <div className="text-xs mt-1">
-                      {bulkSendingState.estimatedTimeRemaining}
-                    </div>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
+      {/* Campaign Completed Section */}
+      {campaignCompleted && (
+        <div className="space-y-4 p-4 bg-green-50 rounded-lg border border-green-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <h4 className="font-medium text-green-900">
+                Campaign Completed!
+              </h4>
+            </div>
+            <Button
+              onClick={resetCampaign}
+              variant="outline"
+              className="bg-white"
+            >
+              Start New Campaign
+            </Button>
+          </div>
 
-            {bulkSendingState.logs.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Activity Log:</h4>
-                <div className="bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto">
-                  {bulkSendingState.logs.slice(-20).map((log, index) => (
-                    <div key={index} className="text-xs font-mono mb-1">
-                      {log}
-                    </div>
-                  ))}
-                </div>
+          {/* Final logs display */}
+          {bulkSendingState.logs.length > 0 && (
+            <div className="space-y-1">
+              <h5 className="text-sm font-medium text-green-800">
+                Final Results:
+              </h5>
+              <div className="bg-white rounded border p-3 max-h-40 overflow-y-auto">
+                {bulkSendingState.logs.slice(-10).map((log, index) => (
+                  <div key={index} className="text-xs text-gray-600 font-mono">
+                    {log}
+                  </div>
+                ))}
               </div>
-            )}
-
-            {campaignCompleted && (
-              <div className="flex justify-center pt-4">
-                <Button onClick={resetCampaign} variant="outline">
-                  Start New Campaign
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Send Button */}

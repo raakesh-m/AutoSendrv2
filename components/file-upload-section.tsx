@@ -242,12 +242,14 @@ export function FileUploadSection() {
       <Card className="border-0 shadow-lg ring-1 ring-border/50 transition-all duration-200 hover:shadow-xl hover:ring-border">
         <CardHeader className="pb-4">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
+            <div className="p-2 bg-primary/10 rounded-lg flex-shrink-0">
               <Upload className="h-5 w-5 text-primary" />
             </div>
-            <div>
-              <CardTitle className="text-xl">Upload Contact Data</CardTitle>
-              <CardDescription className="text-base">
+            <div className="min-w-0">
+              <CardTitle className="text-lg sm:text-xl">
+                Upload Contact Data
+              </CardTitle>
+              <CardDescription className="text-sm sm:text-base">
                 Upload your scraped contact data in CSV, JSON, or TXT format
               </CardDescription>
             </div>
@@ -258,7 +260,7 @@ export function FileUploadSection() {
           <div
             {...getRootProps()}
             className={`
-              group relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer 
+              group relative border-2 border-dashed rounded-xl p-4 sm:p-8 text-center cursor-pointer 
               transition-all duration-300 ease-in-out
               ${
                 isDragActive
@@ -271,7 +273,7 @@ export function FileUploadSection() {
             <div className="relative">
               <Upload
                 className={`
-                  mx-auto h-16 w-16 mb-4 transition-all duration-300
+                  mx-auto h-12 w-12 sm:h-16 sm:w-16 mb-4 transition-all duration-300
                   ${
                     isDragActive
                       ? "text-primary scale-110"
@@ -281,26 +283,31 @@ export function FileUploadSection() {
               />
               <div className="space-y-2">
                 {isDragActive ? (
-                  <p className="text-lg font-medium text-primary animate-pulse">
+                  <p className="text-base sm:text-lg font-medium text-primary animate-pulse">
                     Drop the files here...
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-lg font-medium">
-                      Drag & drop files here, or click to select
+                    <p className="text-base sm:text-lg font-medium">
+                      <span className="hidden sm:inline">
+                        Drag & drop files here, or{" "}
+                      </span>
+                      <span className="sm:hidden">Tap to </span>
+                      <span className="sm:hidden">select files</span>
+                      <span className="hidden sm:inline">click to select</span>
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
-                      <span className="px-3 py-1 text-xs font-medium bg-muted rounded-full">
+                      <span className="px-2 py-1 sm:px-3 sm:py-1 text-xs font-medium bg-muted rounded-full">
                         CSV
                       </span>
-                      <span className="px-3 py-1 text-xs font-medium bg-muted rounded-full">
+                      <span className="px-2 py-1 sm:px-3 sm:py-1 text-xs font-medium bg-muted rounded-full">
                         JSON
                       </span>
-                      <span className="px-3 py-1 text-xs font-medium bg-muted rounded-full">
+                      <span className="px-2 py-1 sm:px-3 sm:py-1 text-xs font-medium bg-muted rounded-full">
                         TXT
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto px-2">
                       Expected fields:{" "}
                       <span className="font-medium">email</span> (required),
                       name, company_name, role, recruiter_name

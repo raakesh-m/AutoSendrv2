@@ -31,8 +31,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, Trash2, Edit, Download, RefreshCw } from "lucide-react";
+import {
+  Search,
+  Trash2,
+  Download,
+  RefreshCw,
+  Eye,
+  FileText,
+  Users,
+  Mail,
+  Server,
+  Paperclip,
+  Plus,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import Link from "next/link";
 
 interface Contact {
   id: string;
@@ -45,23 +58,13 @@ interface Contact {
   created_at: string;
 }
 
-interface EmailSend {
-  id: string;
-  recipient: string;
-  recipient_name?: string;
-  company_name?: string;
-  subject: string;
-  status: string;
-  sent_at?: string;
-  error_message?: string;
-}
-
 interface SmtpConfig {
   id: string;
   email: string;
   smtp_host: string;
   smtp_port: number;
   use_ssl: boolean;
+  provider_type: string;
   created_at: string;
 }
 
@@ -71,23 +74,35 @@ interface Template {
   subject: string;
   body: string;
   variables: string[];
+  is_default: boolean;
+  created_at: string;
+}
+
+interface Attachment {
+  id: string;
+  name: string;
+  original_name: string;
+  file_size: number;
+  mime_type: string;
+  category: string;
+  is_active: boolean;
   created_at: string;
 }
 
 export function DatabaseTables() {
   const [searchTerms, setSearchTerms] = useState({
     contacts: "",
-    emailLogs: "",
-    smtpCredentials: "",
     templates: "",
+    smtpCredentials: "",
+    attachments: "",
   });
   const [loading, setLoading] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [data, setData] = useState({
     contacts: [] as Contact[],
-    emailSends: [] as EmailSend[],
-    smtpConfigs: [] as SmtpConfig[],
     templates: [] as Template[],
+    smtpConfigs: [] as SmtpConfig[],
+    attachments: [] as Attachment[],
   });
   const { toast } = useToast();
 
@@ -95,27 +110,27 @@ export function DatabaseTables() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [contactsRes, emailSendsRes, smtpRes, templatesRes] =
+      const [contactsRes, templatesRes, smtpRes, attachmentsRes] =
         await Promise.all([
           fetch("/api/contacts"),
-          fetch("/api/email-sends"),
-          fetch("/api/smtp?all=true"),
           fetch("/api/templates"),
+          fetch("/api/smtp?all=true"),
+          fetch("/api/attachments"),
         ]);
 
-      const [contactsData, emailSendsData, smtpData, templatesData] =
+      const [contactsData, templatesData, smtpData, attachmentsData] =
         await Promise.all([
           contactsRes.json(),
-          emailSendsRes.json(),
-          smtpRes.json(),
           templatesRes.json(),
+          smtpRes.json(),
+          attachmentsRes.json(),
         ]);
 
       setData({
         contacts: contactsData.contacts || [],
-        emailSends: emailSendsData.emailSends || [],
-        smtpConfigs: smtpData.smtp_configs || [],
         templates: templatesData.templates || [],
+        smtpConfigs: smtpData.smtp_configs || [],
+        attachments: attachmentsData.attachments || [],
       });
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -144,14 +159,14 @@ export function DatabaseTables() {
         case "contacts":
           endpoint = `/api/contacts?id=${id}`;
           break;
-        case "emailLogs":
-          endpoint = `/api/email-sends?id=${id}`;
+        case "templates":
+          endpoint = `/api/templates?id=${id}`;
           break;
         case "smtpCredentials":
           endpoint = `/api/smtp?id=${id}`;
           break;
-        case "templates":
-          endpoint = `/api/templates?id=${id}`;
+        case "attachments":
+          endpoint = `/api/attachments?id=${id}`;
           break;
       }
 
@@ -186,17 +201,17 @@ export function DatabaseTables() {
           endpoint = "/api/contacts";
           dataArray = data.contacts;
           break;
-        case "emailLogs":
-          endpoint = "/api/email-sends";
-          dataArray = data.emailSends;
+        case "templates":
+          endpoint = "/api/templates";
+          dataArray = data.templates;
           break;
         case "smtpCredentials":
           endpoint = "/api/smtp";
           dataArray = data.smtpConfigs;
           break;
-        case "templates":
-          endpoint = "/api/templates";
-          dataArray = data.templates;
+        case "attachments":
+          endpoint = "/api/attachments";
+          dataArray = data.attachments;
           break;
       }
 
@@ -239,15 +254,15 @@ export function DatabaseTables() {
         ]);
         filename = "contacts.csv";
         break;
-      case "emailLogs":
-        csvData = convertToCSV(data.emailSends, [
+      case "templates":
+        csvData = convertToCSV(data.templates, [
           "id",
-          "recipient",
+          "name",
           "subject",
-          "status",
-          "sent_at",
+          "is_default",
+          "created_at",
         ]);
-        filename = "email_logs.csv";
+        filename = "templates.csv";
         break;
       case "smtpCredentials":
         csvData = convertToCSV(data.smtpConfigs, [
@@ -255,154 +270,236 @@ export function DatabaseTables() {
           "email",
           "smtp_host",
           "smtp_port",
+          "provider_type",
         ]);
         filename = "smtp_configs.csv";
         break;
-      case "templates":
-        csvData = convertToCSV(data.templates, [
+      case "attachments":
+        csvData = convertToCSV(data.attachments, [
           "id",
           "name",
-          "subject",
-          "created_at",
+          "original_name",
+          "file_size",
+          "mime_type",
+          "category",
         ]);
-        filename = "templates.csv";
+        filename = "attachments.csv";
         break;
     }
 
     downloadCSV(csvData, filename);
     toast({
       title: "Export Started",
-      description: `Exporting ${table} data to CSV...`,
+      description: `${filename} will be downloaded shortly`,
     });
   };
 
   const convertToCSV = (data: any[], fields: string[]) => {
     const headers = fields.join(",");
     const rows = data.map((item) =>
-      fields
-        .map((field) => {
-          const value = item[field] || "";
-          return typeof value === "string" && value.includes(",")
-            ? `"${value}"`
-            : value;
-        })
-        .join(",")
+      fields.map((field) => `"${item[field] || ""}"`).join(",")
     );
     return [headers, ...rows].join("\n");
   };
 
   const downloadCSV = (csv: string, filename: string) => {
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "sent":
-        return (
-          <Badge variant="default" className="bg-green-500">
-            Sent
-          </Badge>
-        );
-      case "failed":
-        return <Badge variant="destructive">Failed</Badge>;
-      case "pending":
-        return <Badge variant="secondary">Pending</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
-  };
-
+  // Filter functions
   const filteredContacts = data.contacts.filter(
     (contact) =>
       contact.email
-        .toLowerCase()
+        ?.toLowerCase()
         .includes(searchTerms.contacts.toLowerCase()) ||
-      (contact.name &&
-        contact.name
-          .toLowerCase()
-          .includes(searchTerms.contacts.toLowerCase())) ||
-      (contact.company_name &&
-        contact.company_name
-          .toLowerCase()
-          .includes(searchTerms.contacts.toLowerCase()))
-  );
-
-  const filteredEmailSends = data.emailSends.filter(
-    (email) =>
-      email.recipient
-        .toLowerCase()
-        .includes(searchTerms.emailLogs.toLowerCase()) ||
-      email.subject.toLowerCase().includes(searchTerms.emailLogs.toLowerCase())
-  );
-
-  const filteredSmtpConfigs = data.smtpConfigs.filter(
-    (smtp) =>
-      smtp.email
-        .toLowerCase()
-        .includes(searchTerms.smtpCredentials.toLowerCase()) ||
-      smtp.smtp_host
-        .toLowerCase()
-        .includes(searchTerms.smtpCredentials.toLowerCase())
+      contact.name
+        ?.toLowerCase()
+        .includes(searchTerms.contacts.toLowerCase()) ||
+      contact.company_name
+        ?.toLowerCase()
+        .includes(searchTerms.contacts.toLowerCase())
   );
 
   const filteredTemplates = data.templates.filter(
     (template) =>
       template.name
-        .toLowerCase()
+        ?.toLowerCase()
         .includes(searchTerms.templates.toLowerCase()) ||
       template.subject
-        .toLowerCase()
+        ?.toLowerCase()
         .includes(searchTerms.templates.toLowerCase())
   );
 
+  const filteredSmtpConfigs = data.smtpConfigs.filter(
+    (config) =>
+      config.email
+        ?.toLowerCase()
+        .includes(searchTerms.smtpCredentials.toLowerCase()) ||
+      config.provider_type
+        ?.toLowerCase()
+        .includes(searchTerms.smtpCredentials.toLowerCase())
+  );
+
+  const filteredAttachments = data.attachments.filter(
+    (attachment) =>
+      attachment.name
+        ?.toLowerCase()
+        .includes(searchTerms.attachments.toLowerCase()) ||
+      attachment.original_name
+        ?.toLowerCase()
+        .includes(searchTerms.attachments.toLowerCase()) ||
+      attachment.category
+        ?.toLowerCase()
+        .includes(searchTerms.attachments.toLowerCase())
+  );
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex justify-between items-center">
-          <div>
-            <CardTitle>Database Management</CardTitle>
-            <CardDescription>
-              View and manage all your backend data
-            </CardDescription>
-          </div>
-          <Button
-            variant="outline"
-            onClick={fetchData}
-            disabled={loading}
+    <div className="space-y-6">
+      {/* Header with stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="flex items-center p-6">
+            <Users className="h-8 w-8 text-blue-600" />
+            <div className="ml-4">
+              <p className="text-sm font-medium text-muted-foreground">
+                Contacts
+              </p>
+              <p className="text-2xl font-bold">{data.contacts.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center p-6">
+            <FileText className="h-8 w-8 text-green-600" />
+            <div className="ml-4">
+              <p className="text-sm font-medium text-muted-foreground">
+                Templates
+              </p>
+              <p className="text-2xl font-bold">{data.templates.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center p-6">
+            <Server className="h-8 w-8 text-orange-600" />
+            <div className="ml-4">
+              <p className="text-sm font-medium text-muted-foreground">
+                SMTP Configs
+              </p>
+              <p className="text-2xl font-bold">{data.smtpConfigs.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center p-6">
+            <Paperclip className="h-8 w-8 text-purple-600" />
+            <div className="ml-4">
+              <p className="text-sm font-medium text-muted-foreground">
+                Attachments
+              </p>
+              <p className="text-2xl font-bold">{data.attachments.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="contacts" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="contacts" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Contacts
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Templates
+          </TabsTrigger>
+          <TabsTrigger
+            value="smtpCredentials"
             className="flex items-center gap-2"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <Tabs defaultValue="contacts" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="contacts">
-              Contacts ({data.contacts.length})
-            </TabsTrigger>
-            <TabsTrigger value="emailLogs">
-              Email Logs ({data.emailSends.length})
-            </TabsTrigger>
-            <TabsTrigger value="smtpCredentials">
-              SMTP Config ({data.smtpConfigs.length})
-            </TabsTrigger>
-            <TabsTrigger value="templates">
-              Templates ({data.templates.length})
-            </TabsTrigger>
-          </TabsList>
+            <Server className="h-4 w-4" />
+            SMTP
+          </TabsTrigger>
+          <TabsTrigger value="attachments" className="flex items-center gap-2">
+            <Paperclip className="h-4 w-4" />
+            Attachments
+          </TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="contacts" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        {/* Contacts Tab */}
+        <TabsContent value="contacts" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Contact Database</CardTitle>
+                  <CardDescription>
+                    Manage your contact list and view contact details
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => fetchData()}
+                    variant="outline"
+                    size="sm"
+                    disabled={loading}
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                    />
+                  </Button>
+                  <Button
+                    onClick={() => handleExport("contacts")}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete All Contacts</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete all contacts. This action
+                          cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDeleteAll("contacts")}
+                          className="bg-destructive text-destructive-foreground"
+                        >
+                          Delete All
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search contacts..."
                   value={searchTerms.contacts}
@@ -410,48 +507,8 @@ export function DatabaseTables() {
                   className="pl-10"
                 />
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => handleExport("contacts")}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export CSV
-                </Button>
-                {data.contacts.length > 0 && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" disabled={deletingAll}>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete All
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          Are you absolutely sure?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This action cannot be undone. This will permanently
-                          delete all
-                          {data.contacts.length} contacts from the database.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeleteAll("contacts")}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Delete All
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-              </div>
-            </div>
-            <div className="rounded-md border">
+            </CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -459,179 +516,222 @@ export function DatabaseTables() {
                     <TableHead>Name</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Recruiter</TableHead>
-                    <TableHead>Added</TableHead>
+                    <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredContacts.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={7}
-                        className="text-center text-muted-foreground"
-                      >
-                        {loading ? "Loading..." : "No contacts found"}
+                  {filteredContacts.map((contact) => (
+                    <TableRow key={contact.id}>
+                      <TableCell className="font-medium">
+                        {contact.email}
+                      </TableCell>
+                      <TableCell>{contact.name || "-"}</TableCell>
+                      <TableCell>{contact.company_name || "-"}</TableCell>
+                      <TableCell>{contact.role || "-"}</TableCell>
+                      <TableCell>{contact.created_at}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDelete("contacts", contact.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    filteredContacts.map((contact) => (
-                      <TableRow key={contact.id}>
-                        <TableCell className="font-medium">
-                          {contact.email}
-                        </TableCell>
-                        <TableCell>{contact.name || "-"}</TableCell>
-                        <TableCell>{contact.company_name || "-"}</TableCell>
-                        <TableCell>{contact.role || "-"}</TableCell>
-                        <TableCell>{contact.recruiter_name || "-"}</TableCell>
-                        <TableCell>
-                          {new Date(contact.created_at).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleDelete("contacts", contact.id)
-                              }
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
+                  ))}
                 </TableBody>
               </Table>
-            </div>
-          </TabsContent>
+              {filteredContacts.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No contacts found
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          <TabsContent value="emailLogs" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search email logs..."
-                  value={searchTerms.emailLogs}
-                  onChange={(e) => handleSearch("emailLogs", e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => handleExport("emailLogs")}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export CSV
-                </Button>
-                {data.emailSends.length > 0 && (
+        {/* Templates Tab */}
+        <TabsContent value="templates" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Email Templates</CardTitle>
+                  <CardDescription>
+                    Manage your email templates for campaigns
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Link href="/templates">
+                    <Button size="sm">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Manage Templates
+                    </Button>
+                  </Link>
+                  <Button
+                    onClick={() => fetchData()}
+                    variant="outline"
+                    size="sm"
+                    disabled={loading}
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                    />
+                  </Button>
+                  <Button
+                    onClick={() => handleExport("templates")}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="destructive" disabled={deletingAll}>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete All
+                      <Button variant="destructive" size="sm">
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>
-                          Are you absolutely sure?
+                          Delete All Templates
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                          This action cannot be undone. This will permanently
-                          delete all
-                          {data.emailSends.length} email logs from the database.
+                          This will permanently delete all templates. This
+                          action cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={() => handleDeleteAll("emailLogs")}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={() => handleDeleteAll("templates")}
+                          className="bg-destructive text-destructive-foreground"
                         >
                           Delete All
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                )}
+                </div>
               </div>
-            </div>
-            <div className="rounded-md border">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search templates..."
+                  value={searchTerms.templates}
+                  onChange={(e) => handleSearch("templates", e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Recipient</TableHead>
+                    <TableHead>Name</TableHead>
                     <TableHead>Subject</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Sent At</TableHead>
-                    <TableHead>Error</TableHead>
+                    <TableHead>Default</TableHead>
+                    <TableHead>Body Length</TableHead>
+                    <TableHead>Variables</TableHead>
+                    <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredEmailSends.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center text-muted-foreground"
-                      >
-                        {loading ? "Loading..." : "No email logs found"}
+                  {filteredTemplates.map((template) => (
+                    <TableRow key={template.id}>
+                      <TableCell className="font-medium">
+                        {template.name}
                       </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredEmailSends.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="font-medium">
-                          <div>
-                            <div>{log.recipient}</div>
-                            {log.recipient_name && (
-                              <div className="text-sm text-muted-foreground">
-                                {log.recipient_name}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{log.subject}</TableCell>
-                        <TableCell>{getStatusBadge(log.status)}</TableCell>
-                        <TableCell>{log.sent_at || "-"}</TableCell>
-                        <TableCell>
-                          {log.error_message && (
-                            <div
-                              className="text-sm text-red-500 max-w-32 truncate"
-                              title={log.error_message}
-                            >
-                              {log.error_message}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
+                      <TableCell className="max-w-[200px] truncate">
+                        {template.subject}
+                      </TableCell>
+                      <TableCell>
+                        {template.is_default ? (
+                          <Badge variant="default">Default</Badge>
+                        ) : (
+                          <Badge variant="secondary">Custom</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{template.body?.length || 0} chars</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {template.variables?.length || 0} vars
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{template.created_at}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Link href={`/templates?id=${template.id}`}>
+                            <Button variant="outline" size="sm">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </Link>
                           <Button
-                            variant="ghost"
+                            variant="destructive"
                             size="sm"
-                            onClick={() => handleDelete("emailLogs", log.id)}
+                            onClick={() =>
+                              handleDelete("templates", template.id)
+                            }
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-            </div>
-          </TabsContent>
+              {filteredTemplates.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No templates found
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          <TabsContent value="smtpCredentials" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        {/* SMTP Tab */}
+        <TabsContent value="smtpCredentials" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>SMTP Configurations</CardTitle>
+                  <CardDescription>
+                    Manage your email sending configurations
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Link href="/email-setup">
+                    <Button size="sm">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Configure SMTP
+                    </Button>
+                  </Link>
+                  <Button
+                    onClick={() => fetchData()}
+                    variant="outline"
+                    size="sm"
+                    disabled={loading}
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                    />
+                  </Button>
+                  <Button
+                    onClick={() => handleExport("smtpCredentials")}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search SMTP configs..."
                   value={searchTerms.smtpCredentials}
@@ -641,231 +741,174 @@ export function DatabaseTables() {
                   className="pl-10"
                 />
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => handleExport("smtpCredentials")}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export CSV
-                </Button>
-                {data.smtpConfigs.length > 0 && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" disabled={deletingAll}>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete All
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          Are you absolutely sure?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This action cannot be undone. This will permanently
-                          delete all
-                          {data.smtpConfigs.length} SMTP configurations from the
-                          database.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeleteAll("smtpCredentials")}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Delete All
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-              </div>
-            </div>
-            <div className="rounded-md border">
+            </CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Email</TableHead>
-                    <TableHead>SMTP Host</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Host</TableHead>
                     <TableHead>Port</TableHead>
                     <TableHead>SSL</TableHead>
-                    <TableHead>Created At</TableHead>
+                    <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSmtpConfigs.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center text-muted-foreground"
-                      >
-                        {loading
-                          ? "Loading..."
-                          : "No SMTP configurations found"}
+                  {filteredSmtpConfigs.map((config) => (
+                    <TableRow key={config.id}>
+                      <TableCell className="font-medium">
+                        {config.email}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{config.provider_type}</Badge>
+                      </TableCell>
+                      <TableCell>{config.smtp_host}</TableCell>
+                      <TableCell>{config.smtp_port}</TableCell>
+                      <TableCell>
+                        {config.use_ssl ? (
+                          <Badge variant="default">SSL</Badge>
+                        ) : (
+                          <Badge variant="secondary">No SSL</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{config.created_at}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() =>
+                            handleDelete("smtpCredentials", config.id)
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    filteredSmtpConfigs.map((config) => (
-                      <TableRow key={config.id}>
-                        <TableCell className="font-medium">
-                          {config.email}
-                        </TableCell>
-                        <TableCell>{config.smtp_host}</TableCell>
-                        <TableCell>{config.smtp_port}</TableCell>
-                        <TableCell>{config.use_ssl ? "Yes" : "No"}</TableCell>
-                        <TableCell>
-                          {new Date(config.created_at).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleDelete("smtpCredentials", config.id)
-                              }
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
+                  ))}
                 </TableBody>
               </Table>
-            </div>
-          </TabsContent>
+              {filteredSmtpConfigs.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No SMTP configurations found
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          <TabsContent value="templates" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        {/* Attachments Tab */}
+        <TabsContent value="attachments" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>File Attachments</CardTitle>
+                  <CardDescription>
+                    Manage your uploaded files and attachments
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Link href="/attachments">
+                    <Button size="sm">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Manage Files
+                    </Button>
+                  </Link>
+                  <Button
+                    onClick={() => fetchData()}
+                    variant="outline"
+                    size="sm"
+                    disabled={loading}
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                    />
+                  </Button>
+                  <Button
+                    onClick={() => handleExport("attachments")}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search templates..."
-                  value={searchTerms.templates}
-                  onChange={(e) => handleSearch("templates", e.target.value)}
+                  placeholder="Search attachments..."
+                  value={searchTerms.attachments}
+                  onChange={(e) => handleSearch("attachments", e.target.value)}
                   className="pl-10"
                 />
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => handleExport("templates")}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export CSV
-                </Button>
-                {data.templates.length > 0 && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" disabled={deletingAll}>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete All
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          Are you absolutely sure?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This action cannot be undone. This will permanently
-                          delete all
-                          {data.templates.length} templates from the database.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeleteAll("templates")}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Delete All
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-              </div>
-            </div>
-            <div className="rounded-md border">
+            </CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Template Name</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Variables</TableHead>
-                    <TableHead>Created At</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Original Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Size</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTemplates.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="text-center text-muted-foreground"
-                      >
-                        {loading ? "Loading..." : "No templates found"}
+                  {filteredAttachments.map((attachment) => (
+                    <TableRow key={attachment.id}>
+                      <TableCell className="font-medium">
+                        {attachment.name}
+                      </TableCell>
+                      <TableCell className="max-w-[150px] truncate">
+                        {attachment.original_name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{attachment.mime_type}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {formatFileSize(attachment.file_size)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{attachment.category}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {attachment.is_active ? (
+                          <Badge variant="default">Active</Badge>
+                        ) : (
+                          <Badge variant="destructive">Inactive</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{attachment.created_at}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() =>
+                            handleDelete("attachments", attachment.id)
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    filteredTemplates.map((template) => (
-                      <TableRow key={template.id}>
-                        <TableCell className="font-medium">
-                          {template.name}
-                        </TableCell>
-                        <TableCell className="max-w-64 truncate">
-                          {template.subject}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {template.variables?.map((variable, index) => (
-                              <Badge
-                                key={index}
-                                variant="outline"
-                                className="text-xs"
-                              >
-                                {variable}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(template.created_at).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleDelete("templates", template.id)
-                              }
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
+                  ))}
                 </TableBody>
               </Table>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+              {filteredAttachments.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No attachments found
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

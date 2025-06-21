@@ -60,18 +60,18 @@ export default function DashboardPage() {
       <div className="space-y-8">
         {/* Hero Section */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
                 Welcome to AutoSendr
               </h1>
-              <p className="text-lg text-muted-foreground mt-2 max-w-2xl">
+              <p className="text-base sm:text-lg text-muted-foreground mt-2">
                 Welcome back, {session.user?.name || session.user?.email}! Your
                 AI-powered email automation platform for personalized outreach
                 at scale.
               </p>
             </div>
-            <div className="hidden sm:flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-shrink-0">
               <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
               <span className="text-sm text-muted-foreground">
                 System Active
@@ -84,35 +84,35 @@ export default function DashboardPage() {
         <EmailConfigWarning />
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link href="/single-email-sender">
             <Button
               variant="outline"
-              className="w-full h-16 text-left justify-start hover:bg-muted/50 transition-all duration-200"
+              className="w-full h-auto min-h-16 text-left justify-start hover:bg-muted/50 transition-all duration-200 p-4"
             >
-              <TestTube className="h-6 w-6 mr-3 text-blue-500" />
-              <div>
+              <TestTube className="h-6 w-6 mr-3 text-blue-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
                 <div className="font-semibold">Single Email Sender</div>
                 <div className="text-sm text-muted-foreground">
                   Send personalized emails to individual recipients
                 </div>
               </div>
-              <ArrowRight className="h-4 w-4 ml-auto opacity-50" />
+              <ArrowRight className="h-4 w-4 ml-2 opacity-50 flex-shrink-0" />
             </Button>
           </Link>
           <Link href="/bulk-email-sender">
             <Button
               variant="outline"
-              className="w-full h-16 text-left justify-start hover:bg-muted/50 transition-all duration-200"
+              className="w-full h-auto min-h-16 text-left justify-start hover:bg-muted/50 transition-all duration-200 p-4"
             >
-              <Send className="h-6 w-6 mr-3 text-green-500" />
-              <div>
+              <Send className="h-6 w-6 mr-3 text-green-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
                 <div className="font-semibold">Bulk Email Sender</div>
                 <div className="text-sm text-muted-foreground">
                   Send campaigns to multiple contacts at once
                 </div>
               </div>
-              <ArrowRight className="h-4 w-4 ml-auto opacity-50" />
+              <ArrowRight className="h-4 w-4 ml-2 opacity-50 flex-shrink-0" />
             </Button>
           </Link>
         </div>
@@ -130,7 +130,7 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="text-center space-y-3">
                 <div className="mx-auto w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-xl flex items-center justify-center">
                   <Users className="h-6 w-6 text-blue-600" />
@@ -189,14 +189,14 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-6">
               {/* Gmail Setup */}
-              <div className="flex items-start space-x-4 p-4 bg-muted/30 rounded-lg">
-                <div className="p-2 bg-red-100 dark:bg-red-900/20 rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-start space-y-4 sm:space-y-0 sm:space-x-4 p-4 bg-muted/30 rounded-lg">
+                <div className="p-2 bg-red-100 dark:bg-red-900/20 rounded-lg flex-shrink-0 w-fit">
                   <Mail className="h-5 w-5 text-red-600" />
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
                     <h3 className="font-semibold">Gmail Configuration</h3>
-                    <Badge variant="destructive" className="text-xs">
+                    <Badge variant="destructive" className="text-xs w-fit">
                       Required
                     </Badge>
                   </div>
@@ -206,17 +206,19 @@ export default function DashboardPage() {
                     generate an app password.
                   </p>
                   <div className="space-y-2">
-                    <div className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                      Enable 2-Factor Authentication on your Google account
+                    <div className="flex items-start text-sm">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                      <span>
+                        Enable 2-Factor Authentication on your Google account
+                      </span>
                     </div>
-                    <div className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                      Generate an App Password for AutoSendr
+                    <div className="flex items-start text-sm">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                      <span>Generate an App Password for AutoSendr</span>
                     </div>
-                    <div className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                      Configure your email settings in AutoSendr
+                    <div className="flex items-start text-sm">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                      <span>Configure your email settings in AutoSendr</span>
                     </div>
                   </div>
                   <Link href="/email-setup">

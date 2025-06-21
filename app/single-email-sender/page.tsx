@@ -15,10 +15,10 @@ export default function SingleEmailSenderPage() {
     <DashboardLayout>
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
             Single Email Sender
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground">
             Send personalized job application emails to individual recipients
             using your custom template
           </p>
@@ -37,7 +37,7 @@ export default function SingleEmailSenderPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="flex items-start space-x-3">
                 <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
                   <User className="h-5 w-5 text-blue-600" />

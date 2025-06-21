@@ -293,10 +293,13 @@ export function EmailTesterForm() {
         )}
 
         {/* Form Fields */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
           <div className="space-y-2">
-            <Label htmlFor="companyName" className="flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
+            <Label
+              htmlFor="companyName"
+              className="flex items-center gap-2 text-sm font-medium"
+            >
+              <Building2 className="h-4 w-4 flex-shrink-0" />
               Company Name *
             </Label>
             <Input
@@ -316,8 +319,11 @@ export function EmailTesterForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="recipientEmail" className="flex items-center gap-2">
-              <Mail className="h-4 w-4" />
+            <Label
+              htmlFor="recipientEmail"
+              className="flex items-center gap-2 text-sm font-medium"
+            >
+              <Mail className="h-4 w-4 flex-shrink-0" />
               Recipient Email *
             </Label>
             <Input
@@ -343,7 +349,9 @@ export function EmailTesterForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="position">Position (Optional)</Label>
+            <Label htmlFor="position" className="text-sm font-medium">
+              Position (Optional)
+            </Label>
             <Input
               id="position"
               value={formData.position}
@@ -356,8 +364,11 @@ export function EmailTesterForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="recruiterName" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
+            <Label
+              htmlFor="recruiterName"
+              className="flex items-center gap-2 text-sm font-medium"
+            >
+              <User className="h-4 w-4 flex-shrink-0" />
               Recruiter Name (Optional)
             </Label>
             <Input
@@ -377,9 +388,9 @@ export function EmailTesterForm() {
 
         {/* Attachments Section */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label className="flex items-center gap-2">
-              <Paperclip className="h-4 w-4" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <Label className="flex items-center gap-2 text-sm font-medium">
+              <Paperclip className="h-4 w-4 flex-shrink-0" />
               Attachments ({selectedAttachments.length} selected)
             </Label>
             {availableAttachments.length > 3 && (
@@ -388,6 +399,7 @@ export function EmailTesterForm() {
                 size="sm"
                 onClick={() => setShowAttachmentsDialog(true)}
                 disabled={sendingState.isActive}
+                className="w-full sm:w-auto"
               >
                 <File className="h-4 w-4 mr-2" />
                 Show More ({availableAttachments.length - 3} more)
@@ -600,32 +612,40 @@ export function EmailTesterForm() {
           <Button
             onClick={handleSendEmail}
             disabled={!isFormValid || sendingState.isActive}
-            className="w-full h-12 text-lg font-semibold"
+            className="w-full h-12 text-base sm:text-lg font-semibold"
             size="lg"
           >
             {sendingState.isActive ? (
               <>
-                <RefreshCw className="h-5 w-5 mr-3 animate-spin" />
-                {sendingState.step}
+                <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5 mr-2 sm:mr-3 animate-spin" />
+                <span className="truncate">{sendingState.step}</span>
               </>
             ) : emailSent ? (
               <>
-                <CheckCircle className="h-5 w-5 mr-3" />
-                Email Sent Successfully!
+                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 sm:mr-3" />
+                <span className="hidden sm:inline">
+                  Email Sent Successfully!
+                </span>
+                <span className="sm:hidden">Sent!</span>
               </>
             ) : (
               <>
-                <Sparkles className="h-5 w-5 mr-3" />
-                Enhance with AI and Send
+                <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 mr-2 sm:mr-3" />
+                <span className="hidden sm:inline">
+                  Enhance with AI and Send
+                </span>
+                <span className="sm:hidden">AI Enhance & Send</span>
               </>
             )}
           </Button>
 
           {!sendingState.isActive && !emailSent && (
-            <p className="text-xs text-muted-foreground mt-3 text-center">
-              Uses your saved template • AI enhancement when available •
-              Real-time progress tracking • {selectedAttachments.length}{" "}
-              attachment(s) selected
+            <p className="text-xs text-muted-foreground mt-3 text-center px-2">
+              <span className="hidden sm:inline">
+                Uses your saved template • AI enhancement when available •
+                Real-time progress tracking •{" "}
+              </span>
+              {selectedAttachments.length} attachment(s) selected
             </p>
           )}
         </div>
